@@ -1,6 +1,6 @@
 # Accuracy check
 
-Labelled by the build agent (Claude Code) as a self-assessment, not an independent human review — each verdict was re-checked against its transcript quote and the reported figures; two ledger rows were re-labelled after the fixes that corrected them (noted in labels.csv); scored 2026-11-15. Sample built by `make_sheet.py` (filings stratified across tiers; every scored or not-yet-due ledger verdict).
+Labelled by the build agent (drafted) and reviewed by the author, who confirmed all labels without changes — a human check, but not an independent one; two ledger rows were re-labelled after the fixes that corrected them (noted in labels.csv); scored 2026-11-15. Sample built by `make_sheet.py` (filings stratified across tiers; every scored or not-yet-due ledger verdict).
 
 | Metric | Result |
 |---|---|

@@ -182,8 +182,9 @@ or not yet due), scored by [`docs/accuracy/score.py`](docs/accuracy/score.py):
 | Recall — important filings FINN surfaced (*needs you* or *worth knowing*, not hidden) | 10/10 (100%) | 10/10 (100%) |
 | Ledger accuracy — verdicts confirmed against the transcript quote and reported figures | 14/16 (88%) | 16/16 (100%) |
 
-**Read this with care.** The labels are a **self-assessment by the build agent**, not an
-independent human review, and the sample is small. The first scoring surfaced four disagreements —
+**Read this with care.** The labels were **drafted by the build agent and reviewed by me**
+(I confirmed all 46 without changes). That is a human check, but not an independent one — I am the
+author — and the sample is small. The first scoring surfaced four disagreements —
 an exchange query placed too low, an immaterial restructuring placed too high, an average-growth
 promise scored against one year, and a partial capex promise compared with total spend. Each was
 fixed in code with a test (listed in [`docs/accuracy/RESULTS.md`](docs/accuracy/RESULTS.md)), so the
@@ -248,8 +249,8 @@ re-run the script.
    only when the app is opened or reopened).
 2. Segment-level ledger: map segment guidance to segment results from investor decks — most of
    today's unscored commitments are segment targets.
-3. An independent, human-labelled evaluation set (the current accuracy check is a self-assessment),
-   run on every prompt change.
+3. An independent evaluation set labelled by someone other than the author (the current check
+   was reviewed by me), run on every prompt change.
 4. Peer view: the same promise ledger across a sector ("who guides conservatively?").
 
 ---
