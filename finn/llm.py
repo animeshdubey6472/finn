@@ -122,7 +122,7 @@ class LLM:
         if spec in self._exhausted:
             return False
         if provider == "gemini":
-            return bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
+            return bool((os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip())
         if provider in OPENAI_COMPATIBLE:
             env = OPENAI_COMPATIBLE[provider][1]
             return env is None or bool(os.environ.get(env))
@@ -219,7 +219,7 @@ class LLM:
         return self._openai_compatible(provider, model, system, user, max_tokens)
 
     def _gemini(self, model, system, user, attachments, max_tokens, search):
-        key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        key = (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
         base = os.environ.get("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
         parts: list[dict] = [
             {"inlineData": {"mimeType": a.mime_type, "data": base64.b64encode(a.data).decode("ascii")}} for a in attachments
