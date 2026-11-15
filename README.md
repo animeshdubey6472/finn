@@ -143,6 +143,25 @@ logged with tokens and list-price cost (`web/data/meta.json`, and the Alerts tab
   [SEBI circular SEBI/HO/CFD/CFD-PoD-1/P/CIR/2023/123, 13 July 2023](https://www.sebi.gov.in/legal/circulars/jul-2023/disclosure-of-material-events-information-by-listed-entities-under-regulations-30-and-30a-of-securities-and-exchange-board-of-india-listing-obligations-and-disclosure-requirements-regulations-201-_73910.html)),
   so FINN reads the profile from the filing. A web lookup exists for filings without one, but is off by default: search grounding needs a paid Gemini key (set `FINN_MODELS_SEARCH`).
 
+## Accuracy check
+
+A labelled sample (30 filings stratified across tiers, plus every ledger verdict that is scored
+or not yet due), scored by [`docs/accuracy/score.py`](docs/accuracy/score.py):
+
+| Metric | Result |
+|---|---|
+| "Needs you" precision — filings FINN put in *needs you* that were labelled important | 9/10 (90%) |
+| Recall — important filings FINN surfaced (*needs you* or *worth knowing*, not hidden) | 10/10 (100%) |
+| Ledger accuracy — verdicts confirmed against the transcript quote and reported figures | 14/16 (88%) |
+
+**Read this with care.** The sample is small, and the labels are a **self-assessment by the build
+agent**, not an independent human review. Every verdict was re-checked against its quote and the
+reported numbers, and the exercise caught a real bug (promises about years older than the
+quarterly window were wrongly left "not yet due"; fixed before scoring). The four disagreements —
+one over-promoted filing, one under-promoted, two questionable verdicts — are listed in
+[`docs/accuracy/RESULTS.md`](docs/accuracy/RESULTS.md). Re-label `labels.csv` yourself and re-run
+the script to get your own numbers.
+
 ## Known limitations (measured, not guessed)
 
 - **The ledger scores only what headline financials can check.** Across the seven demo

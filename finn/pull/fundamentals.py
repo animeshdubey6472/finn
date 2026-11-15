@@ -135,6 +135,7 @@ def _annual(c: Company) -> dict:
         "opm": [_r(_div(o, r) * 100) if _div(o, r) is not None else None for o, r in zip(op, rev)],
         "pat": _aligned(c.pnl, labels, "Net Profit"),
         "interest": _aligned(c.pnl, labels, "Interest"),
+        "other_income": _aligned(c.pnl, labels, "Other Income"),
         "payout": _aligned(c.pnl, labels, "Dividend Payout %"),
         "cfo": cfo,
         "fcf": fcf,

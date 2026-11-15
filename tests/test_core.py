@@ -243,3 +243,10 @@ def test_margin_miss_that_depends_on_other_income_is_not_a_verdict():
     fund["series"]["quarterly"]["other_income"] = [6] * 6
     v = ledger.score(_g(metric="operating_margin", low=30, high=31, margin_basis="ebitda"), ledger.Financials(fund), (2026, 3))
     assert v["status"] == "unmeasured" and "including it" in v["detail"]
+
+
+def test_complete_year_older_than_quarterly_window_uses_annual_table():
+    fund = _fund([100] * 6, [15] * 6, [10] * 6, ["Jun 2025"] + QL)
+    fund["series"]["annual"] = {"labels": ["Mar 2022", "Mar 2023"], "revenue": [100, 105], "op_profit": [25, 27], "pat": [10, 11], "capex": [5, 5]}
+    v = ledger.score(_g(target_fy=2023, low=7, high=8, unit="pct"), ledger.Financials(fund), (2022, 9))
+    assert v["status"] == "missed" and "FY23" in v["detail"] and "+5.0%" in v["detail"]

@@ -5,6 +5,10 @@ working in the terminal on this repository. The product itself uses **Google Gem
 runtime (see the README's model-routing table). The full session transcript is exported
 alongside this file: [`claude-code-session.txt`](claude-code-session.txt).
 
+The session ran on two Claude accounts: when the first reached its usage limit, the agent wrote a
+handover file and the same Claude Code session continued after logging in to a second account. The
+transcript is one continuous export covering both parts, including my original instructions.
+
 This page is the readable summary: how the work was split between me and the agent, the
 decisions I made, and the mistakes that review caught.
 
@@ -59,6 +63,7 @@ Every one of these was found by reading real output, not by tests passing.
 | HAL ledger | EBITDA margin "behind" (24.9% vs 30–31%) only because other income was excluded | When a margin verdict depends on the EBITDA definition, both numbers are shown instead |
 | ITC results | Revenue included excise duty (₹30,578 cr vs ₹20,269 cr net) — caught by the reconciliation badge | Excise is netted from revenue; card now matches standardized data |
 | All companies | 8 of 42 transcripts silently dropped — the model wrapped its answer in a one-item list | Unwrapped at the client; recovered from cache at no extra cost |
+| Accuracy labelling | HAL promises about FY23 were shown as "not yet due" — FY23 is older than the 13-quarter window | Complete years fall back to the annual table; FY23 promises now scored |
 | Final review | The deployed app measured "last 24h" from today's date, so it would look empty a day after publishing | Windows are measured from the snapshot time, shown in the header |
 | Final review | README overstated traceability and used a symbol (TATAMOTORS) that no longer exists | Claims corrected; example replaced; limitations section added |
 

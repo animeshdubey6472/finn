@@ -47,7 +47,8 @@ class Financials:
             if period and a["revenue"][i] is not None:
                 self.a[period] = {"revenue": a["revenue"][i], "op_profit": a["op_profit"][i], "pat": a["pat"][i], "capex": a["capex"][i],
                                   "borrowings": (a.get("borrowings") or [None] * len(a["labels"]))[i],
-                                  "deposits": (a.get("deposits") or [None] * len(a["labels"]))[i]}
+                                  "deposits": (a.get("deposits") or [None] * len(a["labels"]))[i],
+                                  "other_income": (a.get("other_income") or [None] * len(a["labels"]))[i]}
         self.latest_quarter: Period | None = max(self.q) if self.q else None
 
     # -- period arithmetic ---------------------------------------------------------
@@ -99,12 +100,15 @@ class Financials:
             return None if cur["pat"] is None or not cur["revenue"] else cur["pat"] / cur["revenue"] * 100
         if metric == "capex":
             return cur.get("capex")
+        if metric == "operating_margin_incl_other_income":
+            oi = cur.get("other_income")
+            return None if cur["op_profit"] is None or oi is None or not cur["revenue"] else (cur["op_profit"] + oi) / cur["revenue"] * 100
         return None
 
 
 def _range_text(item: dict) -> str:
     low, high, unit = item.get("low"), item.get("high"), {"pct": "%", "bps": " bps", "inr_cr": " cr", "x": "×", "count": ""}.get(item.get("unit") or "", "")
-    if low is None:
+    if low is None or (item.get("unit") == "x" and abs(low) > 100):  # a "multiple" in the billions is a mis-tagged currency amount
         return ""
     prefix = "₹" if item.get("unit") == "inr_cr" else ""
     fmt = lambda v: f"{v:,.0f}" if float(v).is_integer() else f"{v:,.1f}"  # noqa: E731
@@ -203,8 +207,15 @@ def score(item: dict, fin: Financials, call_period_end: Period) -> dict:
         if metric == "deposit_growth":
             return _score_deposits(item, fin, fy, fy_name)
         if not done:
-            return _verdict("open", f"No {fy_name} quarter has been reported yet.")
-        complete = len(done) == 4
+            if end not in fin.a:
+                return _verdict("open", f"No {fy_name} quarter has been reported yet.")
+            # The year is complete but older than the quarterly window: use the annual table.
+            if not numeric and not (item.get("unit") == "inr_cr" and metric in LEVEL_KEYS):
+                return _verdict("unmeasured", f"{fy_name} is older than the quarterly history, and the promise has no number to check annually.")
+            if item.get("unit") == "bps":
+                return _verdict("unmeasured", f"{fy_name} is older than the quarterly history needed for a basis-point comparison.")
+            done = []
+        complete = len(done) == 4 or not done
         quarters = done
         scope = fy_name if complete else f"{fy_name} so far ({len(done)} of 4 quarters)"
 
@@ -259,7 +270,8 @@ def score(item: dict, fin: Financials, call_period_end: Period) -> dict:
     # Some companies count other income inside EBITDA; the standardized operating margin does not.
     # If the promise is missed only under our definition, say so instead of issuing a verdict.
     if metric == "operating_margin" and status in {"missed", "behind"}:
-        inclusive = fin.measure("operating_margin_incl_other_income", quarters)
+        inclusive = (fin.annual_measure("operating_margin_incl_other_income", fy) if annual is not None
+                     else fin.measure("operating_margin_incl_other_income", quarters))
         if inclusive is not None and inclusive >= low - MARGIN_TOLERANCE:
             return _verdict("unmeasured", f"{scope}: operating margin {actual:.1f}% excluding other income, {inclusive:.1f}% including it, "
                             f"against {_range_text(item)} guided — met or missed depending on whether management counts other income in EBITDA.",

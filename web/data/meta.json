@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-15T15:41:11+00:00",
+  "generated_at": "2026-11-15T15:59:48+00:00",
   "version": "0.1.0",
   "portfolio": [
     "RELIANCE",
@@ -42,9 +42,9 @@
   "usage_run": {
     "calls": 1,
     "cache_hits": 55,
-    "tokens_in": 4311,
-    "tokens_out": 3868,
-    "list_cost_usd": 0.0177,
+    "tokens_in": 4379,
+    "tokens_out": 1031,
+    "list_cost_usd": 0.0039,
     "by_task": {
       "transcript": {
         "calls": 0,
@@ -63,25 +63,25 @@
       "synthesis": {
         "calls": 1,
         "cached": 6,
-        "tokens_in": 4311,
-        "tokens_out": 3868,
-        "list_cost_usd": 0.01774
+        "tokens_in": 4379,
+        "tokens_out": 1031,
+        "list_cost_usd": 0.00389
       }
     },
     "by_model": {
-      "gemini-3.6-flash": {
+      "gemini-3.5-flash-lite": {
         "calls": 1,
-        "tokens_in": 4311,
-        "tokens_out": 3868,
-        "list_cost_usd": 0.01774
+        "tokens_in": 4379,
+        "tokens_out": 1031,
+        "list_cost_usd": 0.00389
       }
     }
   },
   "usage_total": {
-    "calls": 176,
-    "tokens_in": 2001117,
-    "tokens_out": 209712,
-    "list_cost_usd": 0.9895
+    "calls": 178,
+    "tokens_in": 2009848,
+    "tokens_out": 211695,
+    "list_cost_usd": 0.9971
   },
   "network": {
     "network": 0,
@@ -100,5 +100,5 @@
     "read_this_run": 5
   },
   "research_count": 7,
-  "seconds": 17.9
+  "seconds": 154.5
 }
