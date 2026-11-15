@@ -25,7 +25,7 @@ build challenge. It does two jobs:
 |---|---|
 | **App** | **https://animeshdubey6472.github.io/finn/** — open on a phone |
 | **Run locally** | `python -m venv .venv && .venv/bin/pip install -r requirements.txt` → `cp .env.example .env` and add a free Gemini key → `.venv/bin/python -m finn serve` → http://127.0.0.1:8000 |
-| **Research any ticker** | `python -m finn research COALINDIA` (or type it into the app's search when the local server runs) |
+| **Research any ticker** | In the app: **Research → type any NSE symbol**. Live research runs on a small free server ([finn-api](https://finn-api-35ep.onrender.com/api/health)); locally: `python -m finn research COALINDIA` |
 | **Refresh everything** | `python -m finn refresh` |
 | **Alerts in the terminal** | `python -m finn alerts --move 3 --volume 2.5` |
 
@@ -211,7 +211,14 @@ re-run the script.
   validation passes (most companies loaded, no published filings lost, prices not older), so a run
   blocked by a source leaves the last good site in place. Without a `GEMINI_API_KEY` repository
   secret, new filings are triaged by rules only; research is refreshed manually
-  (`python -m finn research …`). Live research on a new ticker needs `python -m finn serve`.
+  (`python -m finn research …`).
+- **Live research runs on a free host, in a lighter mode.** The app on GitHub Pages calls a small
+  API on Render's free tier (CORS limited to the Pages site; one run at a time; 3 runs per visitor
+  per hour and 20 per day; fresh results cached for 24 hours). To fit 0.1 vCPU and 512 MB it reads
+  the 4 latest call transcripts and skips the annual report. A fresh company took 82 s end to end in
+  the acceptance test (24/24 quotes verified) and a repeat took under a second; after 15 idle
+  minutes the server sleeps and the first visitor waits about a minute more, which the app says.
+  If the server is asleep, busy, rate-limited or fails, the app falls back to precomputed research.
 - **Appointee backgrounds come from the filing.** SEBI requires a profile in the *appointment*
   disclosure, but a later filing (a shareholder vote, say) may not repeat it, and FINN sees only
   each company's most recent filings. For a CEO, CFO or Chair with no profile, FINN asks the model
