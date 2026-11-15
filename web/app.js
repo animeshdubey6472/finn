@@ -360,6 +360,7 @@ function itemCard(item) {
     enr?.type === "results" ? promisesFor(item.symbol) : null,
     enr?.type === "people" ? peopleBlock(enr) : null,
     item.facts?.length ? h("div", { class: "facts" }, item.facts.map(f => h("span", { class: "fact" }, `${f.label}: `, h("b", {}, f.value)))) : null,
+    item.size_note ? h("p", { class: "tiny muted", style: "margin-top:8px" }, item.size_note) : null,
     foot(item));
   card.addEventListener("click", e => { if (!e.target.closest("a")) { markSeen([item.id]); card.classList.add("seen"); } });
   return card;
@@ -400,6 +401,7 @@ function knowRow(item) {
       enr?.type === "results" ? promisesFor(item.symbol) : null,
       enr?.type === "people" ? peopleBlock(enr) : null,
       item.facts?.length ? h("div", { class: "facts" }, item.facts.map(f => h("span", { class: "fact" }, `${f.label}: `, h("b", {}, f.value)))) : null,
+      item.size_note ? h("p", { class: "tiny muted", style: "margin-top:6px" }, item.size_note) : null,
       h("div", { style: "margin-top:8px" }, h("a", { href: item.url, target: "_blank", rel: "noopener" }, "Open filing ↗"), " · ", h("a", { href: `#/c/${encodeURIComponent(item.symbol)}` }, `${item.symbol} research`))));
   });
   return wrap;
@@ -523,7 +525,7 @@ function viewResearchHome() {
         r.one_liner ? h("div", { class: "s", style: "color:var(--ink-2)" }, r.one_liner) : null,
         h("div", { class: "s" }, `${r.calls} calls read · ${r.delivered} delivered · ${r.missed} missed${r.behind ? ` · ${r.behind} behind` : ""}`)),
       h("div", { class: "r" }, ago(r.generated_at))))) : h("div", { class: "empty" }, "Nothing researched yet."),
-    h("p", { class: "tiny muted", style: "margin-top:12px" }, state.api ? "Live research is on: any listed symbol can be researched in about a minute." : "Showing precomputed research. Run the local server (python -m finn serve) to research any symbol live."),
+    h("p", { class: "tiny muted", style: "margin-top:12px", "data-api-status": "", role: "status" }, API_STATUS_TEXT[state.apiStatus] || API_STATUS_TEXT.off),
   ];
 }
 
@@ -725,19 +727,25 @@ async function viewCompany(sym) {
     try { const d = await getJSON(`data/research/${known.file}`); state.research.set(sym, d); return companyPage(d); } catch { /* fall through to live */ }
   }
   if (state.api) {
-    try { const d = await getJSON(`api/research/${encodeURIComponent(sym)}`); state.research.set(sym, d); return companyPage(d); } catch { /* not cached */ }
+    try { const d = await getJSON(apiUrl(`/api/research/${encodeURIComponent(sym)}`)); state.research.set(sym, d); return companyPage(d); } catch { /* not cached */ }
     return [liveResearch(sym)];
   }
-  return [h("h1", {}, sym), h("div", { class: "card" },
-    h("p", {}, `${sym} hasn't been researched yet.`),
-    h("p", { class: "small muted", style: "margin-top:6px" }, "This deployment shows precomputed research. The engine works on any NSE symbol — run it locally:"),
-    h("pre", { class: "small", style: "background:var(--surface-2);padding:10px;border-radius:8px;overflow:auto" }, `python -m finn research ${sym}`))];
+  return [notResearched(sym)];
+}
+
+function notResearched(sym, problem) {
+  return h("div", {}, h("h1", {}, sym), h("div", { class: "card" },
+    h("p", {}, problem || `${sym} hasn't been researched yet.`),
+    h("p", { class: "tiny muted", style: "margin-top:6px", "data-api-status": "", role: "status" }, API_STATUS_TEXT[state.apiStatus] || ""),
+    h("p", { class: "small muted", style: "margin-top:6px" }, "The engine works on any NSE symbol — run it locally:"),
+    h("pre", { class: "small", style: "background:var(--surface-2);padding:10px;border-radius:8px;overflow:auto" }, `python -m finn research ${sym}`)));
 }
 
 function liveResearch(sym) {
   const steps = h("ul", { class: "steps" });
   const box = h("div", {}, h("h1", {}, sym), h("p", { class: "muted small" }, "Researching from primary sources. This takes about a minute the first time."), steps);
-  const es = new EventSource(`api/research/${encodeURIComponent(sym)}/stream`);
+  const es = new EventSource(apiUrl(`/api/research/${encodeURIComponent(sym)}/stream`));
+  let finished = false;
   const seen = new Map();
   es.addEventListener("progress", e => {
     const { stage, detail } = JSON.parse(e.data);
@@ -748,16 +756,26 @@ function liveResearch(sym) {
     li.textContent = detail; li.classList.add("now");
   });
   es.addEventListener("result", e => {
-    es.close();
+    es.close(); finished = true;
     const d = JSON.parse(e.data); state.research.set(sym, d);
     if (!state.index.find(r => r.symbol === sym)) state.index.push({ symbol: d.symbol, file: `${safeName(d.symbol)}.json`, name: d.name, industry: d.industry, generated_at: d.generated_at, one_liner: d.synthesis?.one_liner, delivered: d.scorecard.delivered, missed: d.scorecard.missed, behind: d.scorecard.behind, calls: d.coverage.transcripts_read });
     if (location.hash === `#/c/${encodeURIComponent(sym)}`) render();
   });
-  es.addEventListener("error", e => {
-    es.close();
-    let msg = "Research failed. Check the symbol and try again.";
-    try { if (e.data) msg = JSON.parse(e.data).message; } catch { /* network error */ }
-    box.append(h("p", { class: "err", style: "margin-top:12px" }, msg));
+  const fail = (message, status) => {
+    es.close(); finished = true;
+    if (status) setApiStatus(status);
+    box.replaceChildren(notResearched(sym, message));
+  };
+  const said = e => { try { return String(JSON.parse(e.data).message || ""); } catch { return ""; } };
+  // Server messages start with a machine reason ("busy: …"); show them as a sentence.
+  const sentence = text => { const t = text.replace(/^(busy|rate limited|daily limit[^:]*):\s*/i, ""); return t.charAt(0).toUpperCase() + t.slice(1) + (/[.!?]$/.test(t) ? "" : "."); };
+  es.addEventListener("failed", e => fail(sentence(said(e) || "Research failed partway"), null));   // the run started and broke
+  es.addEventListener("refused", e => {                                                            // busy, rate limited or daily cap
+    const msg = said(e);
+    fail(`Live research couldn't start: ${sentence(msg || "the server declined")}`, /^busy/i.test(msg) ? "busy" : null);
+  });
+  es.addEventListener("error", () => {                                                              // connection dropped or never opened
+    if (!finished) fail("The live research server stopped responding (it may have gone to sleep). Precomputed research is still available.", "unavailable");
   });
   return box;
 }
@@ -838,17 +856,63 @@ async function render() {
 document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => { location.hash = `#/${t.dataset.route}`; }));
 window.addEventListener("hashchange", () => { render(); window.scrollTo(0, 0); });
 
+/* ---------------------------------------------------------------- live research API
+   The API is optional. `data/config.json` may set {"api_base": "https://…"}; without it the API is
+   used only when the app itself is served by `python -m finn serve` (same origin). On a static host
+   with no API configured, the app is purely the precomputed snapshot. */
+const API_STATUS_TEXT = {
+  off: "Live research is not configured on this deployment; precomputed research is shown.",
+  checking: "Checking the live research server…",
+  waking: "The live research server is waking up (free hosting sleeps when idle). This can take about a minute.",
+  ready: "Live research is on: any listed NSE symbol can be researched in about a minute.",
+  busy: "Live research is busy with another company; try again in a minute.",
+  degraded: "Live research is reachable but a data source or the model is not; results may be incomplete.",
+  unavailable: "The live research server is unreachable right now; precomputed research is shown.",
+};
+function apiUrl(path) { return `${state.apiBase || ""}${path}`; }
+async function fetchWithTimeout(url, ms) {
+  const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), ms);
+  try { return await fetch(url, { cache: "no-store", signal: ctrl.signal }); } finally { clearTimeout(timer); }
+}
+function setApiStatus(status) {
+  state.apiStatus = status;
+  state.api = status === "ready" || status === "busy" || status === "degraded";
+  document.querySelectorAll("[data-api-status]").forEach(el => { el.textContent = API_STATUS_TEXT[status] || ""; });
+}
+async function checkApi() {
+  if (state.apiBase === null) return setApiStatus("off");
+  setApiStatus("checking");
+  const deadline = Date.now() + (state.apiWakeMs || 100000);  // a sleeping free instance can take ~60s to start
+  let first = true;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetchWithTimeout(apiUrl("/api/health"), first ? 8000 : 15000);
+      if (res.ok) {
+        const h = await res.json();
+        return setApiStatus(h.busy ? "busy" : h.ok ? "ready" : (h.checks?.model_configured ? "degraded" : "unavailable"));
+      }
+    } catch { /* asleep, unreachable or timed out */ }
+    if (state.apiBase === "") return setApiStatus("off");  // same-origin static file server: no API here
+    setApiStatus("waking");
+    first = false;
+    await new Promise(r => setTimeout(r, 5000));
+  }
+  setApiStatus("unavailable");
+}
+
 async function boot() {
   applyTheme();
-  const [feed, prices, meta, index] = await Promise.allSettled([getJSON("data/feed.json"), getJSON("data/prices.json"), getJSON("data/meta.json"), getJSON("data/research/index.json")]);
+  const [feed, prices, meta, index, cfg] = await Promise.allSettled([getJSON("data/feed.json"), getJSON("data/prices.json"), getJSON("data/meta.json"), getJSON("data/research/index.json"), getJSON("data/config.json")]);
   state.feed = feed.value || null; state.prices = prices.value || null; state.meta = meta.value || null; state.index = index.value || [];
-  render();
-  // The live-research API exists only when the app is served by `python -m finn serve`.
+  const configured = (cfg.value && typeof cfg.value.api_base === "string" && cfg.value.api_base.trim()) ? cfg.value.api_base.trim().replace(/\/+$/, "") : null;
   const static_host = /\.github\.io$|\.pages\.dev$|\.netlify\.app$|\.vercel\.app$/.test(location.hostname);
-  if (!static_host) {
-    try { const res = await fetch("api/health", { cache: "no-store" }); state.api = res.ok && (await res.json()).fast; } catch { state.api = false; }
-  }
-  if (state.api && (location.hash.startsWith("#/research") || location.hash.startsWith("#/c/"))) render();
+  state.apiBase = configured ?? (static_host ? null : "");
+  state.apiWakeMs = Number(cfg.value?.wake_timeout_s) > 0 ? Number(cfg.value.wake_timeout_s) * 1000 : 100000;
+  state.apiStatus = state.apiBase === null ? "off" : "checking";
+  render();
+  await checkApi();
+  if (location.hash.startsWith("#/research") || location.hash.startsWith("#/c/")) render();
+  if (typeof notifyNew === "function") notifyNew();
 }
 boot();
 // Installable app: network first, last snapshot when offline. Not registered for the local dev server.

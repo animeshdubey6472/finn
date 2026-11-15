@@ -1,0 +1,14 @@
+.venv
+.cache
+.git
+.github
+.env
+.env.*
+.pytest_cache
+__pycache__
+**/__pycache__
+docs/screenshots
+docs/*.txt
+*.txt
+!requirements.txt
+tests

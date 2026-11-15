@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-15T17:04:08+00:00",
+  "generated_at": "2026-11-15T17:23:59+00:00",
   "version": "0.1.0",
   "portfolio": [
     "RELIANCE",
@@ -33,65 +33,58 @@
       "gemini:gemini-3.5-flash-lite"
     ],
     "smart": [
-      "none:none"
+      "gemini:gemini-3.6-flash",
+      "gemini:gemini-3.8-flash",
+      "gemini:gemini-3.5-flash-lite"
     ],
     "search": []
   },
   "usage_run": {
     "calls": 0,
-    "cache_hits": 7,
+    "cache_hits": 0,
     "tokens_in": 0,
     "tokens_out": 0,
     "list_cost_usd": 0,
-    "by_task": {
-      "transcript": {
-        "calls": 0,
-        "cached": 6,
-        "tokens_in": 0,
-        "tokens_out": 0,
-        "list_cost_usd": 0.0
-      },
-      "annual-report": {
-        "calls": 0,
-        "cached": 1,
-        "tokens_in": 0,
-        "tokens_out": 0,
-        "list_cost_usd": 0.0
-      }
-    },
+    "by_task": {},
     "by_model": {}
   },
   "usage_total": {
-    "calls": 269,
-    "tokens_in": 3310725,
-    "tokens_out": 305446,
-    "list_cost_usd": 1.4629
+    "calls": 179,
+    "tokens_in": 2011718,
+    "tokens_out": 211923,
+    "list_cost_usd": 0.9979
   },
   "network": {
     "network": 0,
-    "cache": 8,
+    "cache": 20,
     "bytes": 0
   },
   "feed_stats": {
-    "total": 79,
+    "total": 81,
     "by_tier": {
       "act": 14,
-      "know": 15,
+      "know": 17,
       "buried": 50
     },
-    "read_by_model": 23,
-    "settled_by_rules": 55,
+    "read_by_model": 24,
+    "settled_by_rules": 56,
     "read_this_run": 0
   },
-  "research_count": 22,
+  "research_count": 27,
   "last_run": {
-    "attempted_at": "2026-11-15T17:04:08+00:00",
-    "research": {
-      "updated": [
-        "BAJFINANCE"
-      ],
-      "errors": {}
+    "attempted_at": "2026-11-15T17:23:55+00:00",
+    "push": {
+      "companies_loaded": 18,
+      "companies_failed": {},
+      "prices": {
+        "attempted_at": "2026-11-15T17:23:56+00:00",
+        "ok": true,
+        "updated_at": "2026-11-15T17:23:56+00:00",
+        "as_of": "2026-11-13",
+        "missing": []
+      },
+      "feed_written": true
     }
   },
-  "seconds": 0.1
+  "seconds": 3.7
 }

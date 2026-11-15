@@ -7,6 +7,7 @@ calls, and history deepens run over run even though the sources only expose rece
 from __future__ import annotations
 
 import hashlib
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
@@ -73,6 +74,32 @@ def collect(companies: dict[str, Company], net: Fetcher) -> list[dict]:
 
 
 QUERY_REPLY_WINDOW = timedelta(days=3)
+SIZE_RULE_CATEGORIES = {"m_and_a", "fund_raise", "capex"}
+SIZE_RULE_SHARE = 0.005  # 0.5% of market value
+_AMOUNT = re.compile(r"(?:₹|rs\.?|inr)\s*([\d,]+(?:\.\d+)?)\s*(crores?|cr|lakhs?|million|mn|billion|bn)\b", re.I)
+_SCALE = {"crore": 1, "crores": 1, "cr": 1, "lakh": 0.01, "lakhs": 0.01, "million": 0.1, "mn": 0.1, "billion": 100, "bn": 100}
+
+
+def stated_amounts_cr(item: dict) -> list[float]:
+    """Rupee amounts the model quoted from the filing (facts, headline, why), in crore."""
+    text = " ".join([item.get("headline") or "", item.get("why") or ""] + [f.get("value", "") for f in item.get("facts") or []])
+    return [float(n.replace(",", "")) * _SCALE[u.lower()] for n, u in _AMOUNT.findall(text)]
+
+
+def apply_size_rule(item: dict, mcap_cr: float | None) -> None:
+    """A deal, fund raise or capex whose every stated amount is under 0.5% of market value is real
+    news but not an interruption: it moves to "worth knowing", with the arithmetic shown."""
+    if item.get("category") not in SIZE_RULE_CATEGORIES or item.get("read", {}).get("status") != "ok" or not mcap_cr:
+        return
+    amounts = stated_amounts_cr(item)
+    if not amounts:
+        return  # no stated size: the rules and the model's reading stand
+    largest = max(amounts)
+    if largest < SIZE_RULE_SHARE * mcap_cr:
+        item["score"] = min(item["score"], 60)
+        item["size_note"] = f"Largest stated amount ₹{largest:,.0f} cr is {largest / mcap_cr * 100:.2f}% of market value (₹{mcap_cr:,.0f} cr), below the 0.5% interruption threshold."
+    else:
+        item.pop("size_note", None)
 
 
 def pair_exchange_queries(items: list[dict]) -> list[dict]:
@@ -198,6 +225,9 @@ def build_feed(
             card = _standardized_fallback(item, companies[item["symbol"]])
             if card:
                 item.update(enrichment=card, headline=results_math.headline(card))
+    for item in items:
+        company = companies.get(item["symbol"])
+        apply_size_rule(item, company.top.get("Market Cap") if company else None)
     for item in items:
         item["tier"] = tier_for(item["score"])
 

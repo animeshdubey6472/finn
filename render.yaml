@@ -1,0 +1,29 @@
+# Render Blueprint for FINN's optional live-research API (free plan).
+# Inert until a service is created from it in the Render dashboard. GitHub Pages stays the primary app;
+# set web/data/config.json {"api_base": "https://<service>.onrender.com"} only after the acceptance test passes.
+services:
+  - type: web
+    name: finn-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn finn.server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /   # cheap; /api/health probes external sources and must not gate deploys
+    autoDeploy: false
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false        # set in the dashboard; never committed
+      - key: FINN_ALLOWED_ORIGINS
+        value: https://animeshdubey6472.github.io
+      - key: FINN_LIVE_ANNUAL_REPORT
+        value: "0"         # annual reports are 7-60 MB PDFs: too slow/heavy for 0.1 vCPU / 512 MB
+      - key: FINN_LIVE_TRANSCRIPTS
+        value: "4"
+      - key: FINN_RUNS_PER_DAY
+        value: "20"
+      - key: FINN_RUNS_PER_IP_PER_HOUR
+        value: "3"
+      - key: FINN_CACHE_DIR
+        value: /tmp/finn-cache
+      - key: PYTHON_VERSION
+        value: 3.12.7

@@ -323,3 +323,76 @@ def test_lender_aum_guidance_is_not_revenue():
     assert aum["status"] == "unmeasured" and "AUM" in aum["detail"]
     assert vague["status"] == "unmeasured"
     assert income["status"] == "on_track"
+
+
+def _fund_annual(revenues, labels):
+    fund = _fund([100] * 6, [15] * 6, [10] * 6, ["Jun 2025"] + QL)
+    n = len(labels)
+    fund["series"]["annual"] = {"labels": labels, "revenue": revenues, "op_profit": [1] * n, "pat": [1] * n, "capex": [1] * n}
+    return fund
+
+
+def test_average_growth_promise_is_scored_as_cagr_never_one_year():
+    fin = ledger.Financials(_fund_annual([100, 113, 115.3, 123.1], ["Mar 2024", "Mar 2025", "Mar 2026", "Mar 2027"]))
+    v = ledger.score(_g(low=13, high=13, target_fy=2025, statement="We will sustain our growth of 13% on an average"), fin, (2024, 3))
+    assert "compound annual rate" in v["detail"] and v["status"] == "behind"
+    one_year = ledger.Financials(_fund_annual([100, 113], ["Mar 2024", "Mar 2025"]))
+    assert ledger.score(_g(low=13, high=13, statement="13% on an average"), one_year, (2024, 3))["status"] == "unmeasured"
+
+
+def test_onwards_starts_the_cagr_at_the_named_year():
+    fin = ledger.Financials(_fund_annual([100, 110, 121, 133.1], ["Mar 2024", "Mar 2025", "Mar 2026", "Mar 2027"]))
+    v = ledger.score(_g(low=10, high=10, target_fy=2026, statement="double-digit growth of 10% from FY26 onwards"), fin, (2024, 3))
+    assert v["detail"].startswith("FY26–FY27") and v["status"] == "on_track"
+
+
+def test_partial_capex_promise_is_not_compared_with_total_spend():
+    fin = ledger.Financials(_fund_annual([100, 110], ["Mar 2025", "Mar 2026"]))
+    part = ledger.score(_g(metric="capex", target_fy=2026, low=700, high=700, unit="inr_cr", statement="We have committed closer to 700 crores of CapEx this year."), fin, (2025, 6))
+    whole = ledger.score(_g(metric="capex", target_fy=2026, low=1, high=1, unit="inr_cr", statement="Total capex for the year will be about 1 crore"), fin, (2025, 6))
+    assert part["status"] == "unmeasured" and "like for like" in part["detail"]
+    assert whole["status"] == "delivered"
+
+
+def test_industry_forecasts_and_undated_aspirations_are_not_scored():
+    lender = _fund_annual([100, 111], ["Mar 2025", "Mar 2026"]); lender["is_lender"] = True
+    lender["series"]["annual"]["deposits"] = [100, 111]
+    fin = ledger.Financials(lender)
+    industry = ledger.score(_g(metric="deposit_growth", target_fy=2026, low=11, high=12, statement="Deposit growth of scheduled commercial banks may remain 11-12%"), fin, (2025, 6))
+    assert industry["status"] == "unmeasured" and "industry" in industry["detail"]
+    fin2 = ledger.Financials(_fund([100, 100, 100, 100, 110, 112], [15] * 6, [4] * 6, ["Jun 2025"] + QL))
+    eventually = ledger.score(_g(metric="operating_margin", target_fy=2027, low=20, high=20, statement="Eventually, the margin should rise beyond 20%"), fin2, (2026, 3))
+    assert eventually["status"] == "unmeasured"
+    dated = ledger.score(_g(metric="operating_margin", target_fy=2027, low=14, high=16, firmness="aspiration", statement="We aim for 14-16% margin for FY27"), fin2, (2026, 3))
+    assert dated["status"] != "unmeasured"   # the model's label alone does not hide a dated promise
+
+
+def test_numeric_level_without_period_is_not_a_direction_check():
+    fin = ledger.Financials(_fund([100] * 6, [30] * 6, [10] * 6, ["Jun 2025"] + QL))
+    v = ledger.score(_g(metric="operating_margin", target_fy=None, low=30, high=30, direction="flat", statement="We will maintain 30% operating margin"), fin, (2026, 3))
+    assert v["status"] == "unmeasured"
+
+
+def test_single_year_promise_with_a_multi_year_aside_in_the_quote_stays_single_year():
+    fin = ledger.Financials(_fund_annual([100, 106.8], ["Mar 2025", "Mar 2026"]))
+    v = ledger.score(_g(low=8, high=10, target_fy=2026, statement="The company expects revenue growth of 8% to 10% for the current year.",
+                        quote="the guidance is 8%-10%, and it may so happen a double-digit growth from next year onwards."), fin, (2025, 3))
+    assert v["status"] == "missed" and "FY26" in v["detail"]
+
+
+def test_size_rule_relative_to_market_value():
+    from finn.push.digest import apply_size_rule, stated_amounts_cr
+    eternal = {"category": "m_and_a", "score": 78, "read": {"status": "ok"}, "headline": "Consolidating business; swapping stake",
+               "facts": [{"label": "ZEPL cash consideration", "value": "INR 130.76 crore"}, {"label": "Mygate stake value", "value": "INR 156 crore"}]}
+    apply_size_rule(eternal, 350935)
+    assert eternal["score"] <= 60 and "0.04%" in eternal["size_note"]
+    persistent = {"category": "fund_raise", "score": 86, "read": {"status": "ok"}, "facts": [{"label": "Raised", "value": "INR 42,646.09 million"}]}
+    apply_size_rule(persistent, 99550)
+    assert persistent["score"] == 86  # ₹4,265 cr is 4.3% of market value: stays an interruption
+    no_amount = {"category": "m_and_a", "score": 86, "read": {"status": "ok"}, "facts": [{"label": "Stake", "value": "49%"}]}
+    apply_size_rule(no_amount, 23057)
+    assert no_amount["score"] == 86 and "size_note" not in no_amount
+    assert stated_amounts_cr({"facts": [{"value": "₹70 billion"}, {"value": "Rs 5 lakh"}]}) == [7000.0, 0.05]
+    price = {"category": "fund_raise", "score": 86, "read": {"status": "ok"}, "facts": [{"label": "Floor price", "value": "₹ 992.25"}]}
+    apply_size_rule(price, 695439)
+    assert price["score"] == 86  # a per-share price is not a deal size

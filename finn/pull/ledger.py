@@ -25,6 +25,10 @@ from ..periods import Period
 GROWTH_TOLERANCE = 1.0   # percentage points: "12-14%" is met at 11.0
 MARGIN_TOLERANCE = 0.5   # percentage points
 SCORED = ("delivered", "missed", "on_track", "behind")
+INDUSTRY = re.compile(r"\b(industry|scheduled commercial banks|banking system|system[- ]level|sector(?:al)? growth|the economy|GDP|nominal growth|market will grow)\b", re.I)
+UNDATED = re.compile(r"\b(eventually|over time|over the long term|in the long run|long[- ]term|medium[- ]term|in the coming years|as we scale|someday|at some point)\b", re.I)
+MULTI_YEAR = re.compile(r"\b(on (an )?average|CAGR|compounded|annually|per annum|every year|each year|year after year|onwards|over the next \w+ years|for the next \w+ years|sustain(ed)? (our )?growth)\b", re.I)
+WHOLE_COMPANY_CAPEX = re.compile(r"\b(total|overall|consolidated|group|as a whole|whole company|company[- ]wide|for the (whole )?year|all (our )?(businesses|plants|segments))\b", re.I)
 SCORABLE = {"revenue_growth", "revenue", "ebitda", "pat", "operating_margin", "pat_growth", "pat_margin", "capex", "debt", "deposit_growth"}
 LEVEL_KEYS = {"revenue_growth": ("revenue", "revenue"), "revenue": ("revenue", "revenue"), "pat_growth": ("pat", "PAT"),
               "pat": ("pat", "PAT"), "ebitda": ("op_profit", "EBITDA")}
@@ -36,6 +40,7 @@ class Financials:
     def __init__(self, fundamentals: dict):
         self.fy_end_month: int = fundamentals.get("fy_end_month", 3)
         self.is_lender: bool = fundamentals.get("is_lender", False)
+        self.is_insurer: bool = fundamentals.get("is_insurer", False)
         q, a = fundamentals["series"]["quarterly"], fundamentals["series"]["annual"]
         self.q: dict[Period, dict] = {}
         for i, label in enumerate(q["labels"]):
@@ -173,16 +178,29 @@ def score(item: dict, fin: Financials, call_period_end: Period) -> dict:
         evidence = f"{item.get('quote') or ''} {item.get('statement', '')}"  # not the model-written label
         if not re.search(r"revenue|total income|top ?line", evidence, re.I):
             return _verdict("unmeasured", "The promise does not say what will grow; for a lender that could be the loan book, income or profit.")
-    if fin.is_lender and metric in {"operating_margin", "ebitda"}:
-        return _verdict("unmeasured", "Operating margin and EBITDA are not meaningful for lenders in the standardized financials.")
+    if (fin.is_lender or fin.is_insurer) and metric in {"operating_margin", "ebitda"}:
+        kind = "lenders" if fin.is_lender else "insurers"
+        return _verdict("unmeasured", f"Operating margin and EBITDA are not meaningful for {kind} in the standardized financials.")
+    evidence = f"{item.get('quote') or ''} {item.get('statement', '')}"
+    # A forecast for the industry or the economy is not a promise about this company.
+    if INDUSTRY.search(evidence) and not re.search(r"\b(we|our|us|the company|the bank)\b", item.get("quote") or "", re.I):
+        return _verdict("unmeasured", "A forecast for the industry or economy, not a promise about the company's own numbers.")
+    # "Eventually", "over time", "long term": no date, so nothing to hold it against.
+    if UNDATED.search(evidence):  # the promise's own words, not the model's "aspiration" label
+        return _verdict("unmeasured", "An aspiration without a date; kept as a watch item rather than scored against an invented year.")
     if metric == "deposit_growth" and not fin.is_lender:
         return _verdict("unmeasured", "Deposit growth applies to banks only.")
     if metric not in SCORABLE:
         return _verdict("unmeasured", "Not checkable against headline financials; kept as a watch item.")
 
+    # Multi-year or average growth ("13% on an average", "from FY25 onwards"): a CAGR, never one year.
+    # Judged on the extracted statement (the promise itself): a quote can carry a neighbouring clause.
+    if metric in {"revenue_growth", "pat_growth"} and MULTI_YEAR.search(item.get("statement", "")) and low is not None and item.get("unit") == "pct":
+        return _score_multi_year(item, fin, call_period_end)
+
     # ---- which reported periods does the promise refer to? --------------------------------
     if fy is None:
-        if item.get("direction") and metric.endswith("margin"):
+        if item.get("direction") and metric.endswith("margin") and low is None:
             return _directional(item, fin, call_period_end, None)
         return _verdict("unmeasured", "No explicit target period, so there is nothing to hold it against yet.")
 
@@ -208,6 +226,10 @@ def score(item: dict, fin: Financials, call_period_end: Period) -> dict:
                 return _verdict("open", f"{fy_name} cash flow is not reported yet (capex is annual).")
             if not numeric or item.get("unit") != "inr_cr":
                 return _verdict("unmeasured", f"{fy_name} capex was about ₹{actual:,.0f} cr; the guidance gave no rupee figure to compare.", actual=round(actual), actual_label=f"{fy_name} capex")
+            if not WHOLE_COMPANY_CAPEX.search(evidence):
+                return _verdict("unmeasured", f"{fy_name} fixed-asset spend was about ₹{actual:,.0f} cr, but the promise ({_range_text(item)}) may cover only part of "
+                                f"the company's capex (a plant, a programme, one entity); not comparable like for like.",
+                                actual=round(actual), actual_label=f"{fy_name} capex", target=_range_text(item))
             top = high if high is not None else low
             status = "delivered" if low * 0.85 <= actual <= top * 1.15 else "missed"
             side = "in line with" if status == "delivered" else ("above" if actual > top else "below")
@@ -295,6 +317,34 @@ def score(item: dict, fin: Financials, call_period_end: Period) -> dict:
             left = 4 - len(quarters)
             detail += f" The remaining {left} quarter{'s' if left != 1 else ''} must grow {needed:+.0f}% to get there."
     return _verdict(status, detail, actual=round(actual, 1), actual_label=scope, target=_range_text(item))
+
+
+def _score_multi_year(item: dict, fin: Financials, call_period_end: Period) -> dict:
+    """A multi-year or average growth promise, scored as a CAGR over the completed years since it was made."""
+    key = "revenue" if item["metric"] in {"revenue_growth", "revenue"} else "pat"
+    first_fy = periods.fiscal_year_end(periods.shift(call_period_end, 1), fin.fy_end_month)[0]
+    text = f"{item.get('quote') or ''} {item.get('statement', '')}"
+    if re.search(r"\bonwards\b", text, re.I) and item.get("target_fy"):
+        first_fy, last_fy = max(first_fy, item["target_fy"]), None   # "from FY25 onwards": FY25 is the start
+    else:
+        last_fy = item.get("target_fy") if item.get("target_fy") and item.get("target_fy") > first_fy else None
+    years = [fy for fy in range(first_fy, (last_fy or 2100) + 1) if fin.fy_end(fy) in fin.a][: (last_fy - first_fy + 1) if last_fy else None]
+    base = fin.a.get(fin.fy_end(first_fy - 1), {}).get(key)
+    if len(years) < 2 or not base or base <= 0:
+        reported = ", ".join(periods.fiscal_year_label(fin.fy_end(fy), fin.fy_end_month) for fy in years) or "none yet"
+        return _verdict("unmeasured", f"A multi-year promise; it is scored as a compound growth rate once two full years are reported (reported so far: {reported}).")
+    end_value = fin.a[fin.fy_end(years[-1])].get(key)
+    if not end_value or end_value <= 0:
+        return _verdict("unmeasured", "Multi-year promise; the latest reported value is not usable for a growth rate.")
+    cagr = ((end_value / base) ** (1 / len(years)) - 1) * 100
+    span = f"{periods.fiscal_year_label(fin.fy_end(years[0]), fin.fy_end_month)}–{periods.fiscal_year_label(fin.fy_end(years[-1]), fin.fy_end_month)}"
+    complete = bool(last_fy) and years[-1] == last_fy
+    met = cagr >= item["low"] - GROWTH_TOLERANCE
+    status = ("delivered" if met else "missed") if complete else ("on_track" if met else "behind")
+    noun = "revenue" if key == "revenue" else "PAT"
+    return _verdict(status, f"{span}: {noun} grew at a {cagr:+.1f}% compound annual rate against {_range_text(item)} promised"
+                    + ("" if complete else " (the promise has no end year, so this is the record so far)") + ".",
+                    actual=round(cagr, 1), actual_label=f"{span} CAGR", target=_range_text(item))
 
 
 def _score_debt(item: dict, fin: Financials, fy: int, fy_name: str) -> dict:
@@ -425,3 +475,17 @@ def build(calls: list[dict], fundamentals: dict) -> dict:
             entry["verdict"] = score(item, fin, base) if base else _verdict("unmeasured", "Call date could not be placed.")
             guidance.append(entry)
     return {"guidance": guidance, "scorecard": scorecard(guidance), "walks": walks(guidance)}
+
+
+def rescore(research: dict) -> dict:
+    """Re-apply the current scoring rules to a saved research file (no model calls, no fetching)."""
+    fin = Financials(research["fundamentals"])
+    for g in research.get("guidance", []):
+        call = periods.from_key(g.get("call", ""))
+        base = periods.quarter_discussed(call) if call else None
+        g["target_text"] = _range_text(g) or None
+        g["verdict"] = score(g, fin, base) if base else _verdict("unmeasured", "Call date could not be placed.")
+    research["scorecard"] = scorecard(research.get("guidance", []))
+    research["walks"] = walks(research.get("guidance", []))
+    return research
+

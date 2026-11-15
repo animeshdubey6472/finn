@@ -169,19 +169,20 @@ logged with tokens and list-price cost (`web/data/meta.json`, and the Alerts tab
 A labelled sample (30 filings stratified across tiers, plus every ledger verdict that is scored
 or not yet due), scored by [`docs/accuracy/score.py`](docs/accuracy/score.py):
 
-| Metric | Result |
-|---|---|
-| "Needs you" precision — filings FINN put in *needs you* that were labelled important | 9/10 (90%) |
-| Recall — important filings FINN surfaced (*needs you* or *worth knowing*, not hidden) | 10/10 (100%) |
-| Ledger accuracy — verdicts confirmed against the transcript quote and reported figures | 14/16 (88%) |
+| Metric | First scoring | After fixing what it found |
+|---|---|---|
+| "Needs you" precision — filings FINN put in *needs you* that were labelled important | 9/10 (90%) | 10/10 (100%) |
+| Recall — important filings FINN surfaced (*needs you* or *worth knowing*, not hidden) | 10/10 (100%) | 10/10 (100%) |
+| Ledger accuracy — verdicts confirmed against the transcript quote and reported figures | 14/16 (88%) | 16/16 (100%) |
 
-**Read this with care.** The sample is small, and the labels are a **self-assessment by the build
-agent**, not an independent human review. Every verdict was re-checked against its quote and the
-reported numbers, and the exercise caught a real bug (promises about years older than the
-quarterly window were wrongly left "not yet due"; fixed before scoring). The four disagreements —
-one over-promoted filing, one under-promoted, two questionable verdicts — are listed in
-[`docs/accuracy/RESULTS.md`](docs/accuracy/RESULTS.md). Re-label `labels.csv` yourself and re-run
-the script to get your own numbers.
+**Read this with care.** The labels are a **self-assessment by the build agent**, not an
+independent human review, and the sample is small. The first scoring surfaced four disagreements —
+an exchange query placed too low, an immaterial restructuring placed too high, an average-growth
+promise scored against one year, and a partial capex promise compared with total spend. Each was
+fixed in code with a test (listed in [`docs/accuracy/RESULTS.md`](docs/accuracy/RESULTS.md)), so the
+second column measures "every known error in this sample is fixed", not "FINN is always right". A
+fresh, independently labelled sample is the honest next measurement: re-label `labels.csv` and
+re-run the script.
 
 ## Known limitations (measured, not guessed)
 

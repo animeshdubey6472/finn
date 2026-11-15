@@ -95,6 +95,15 @@ class Company:
         return self.pnl.row("Financing Profit") is not None
 
     @property
+    def is_insurer(self) -> bool:
+        """Insurers report premiums as 'sales'; operating margin and cash conversion mislead for them."""
+        return any("insurance" in part.lower() for part in self.sector_path)
+
+    @property
+    def is_financial(self) -> bool:
+        return self.is_lender or self.is_insurer
+
+    @property
     def fy_end_month(self) -> int:
         """Fiscal year-end month, read off the annual P&L column labels (March for most)."""
         ends = [periods.parse_label(c) for c in self.pnl.columns]

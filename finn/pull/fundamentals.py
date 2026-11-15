@@ -197,7 +197,7 @@ def _snapshot(c: Company, q: dict, a: dict, bs: dict, facts: Facts) -> dict:
             "snapshot",
             f"{last_q} quarter: revenue {cr(q['revenue'][-1])} ({signed(q['rev_yoy'][-1])} YoY), "
             f"PAT {cr(q['pat'][-1])} ({signed(q['pat_yoy'][-1])} YoY)"
-            + ("" if c.is_lender or q["opm"][-1] is None else f", operating margin {q['opm'][-1]:.1f}%") + ".",
+            + ("" if c.is_financial or q["opm"][-1] is None else f", operating margin {q['opm'][-1]:.1f}%") + ".",
             "neutral", revenue=q["revenue"][-1], pat=q["pat"][-1], rev_yoy=q["rev_yoy"][-1], pat_yoy=q["pat_yoy"][-1], opm=q["opm"][-1],
         )
 
@@ -205,7 +205,10 @@ def _snapshot(c: Company, q: dict, a: dict, bs: dict, facts: Facts) -> dict:
         {"key": "revenue", "label": f"{rev_word} · TTM", "value": rev_ttm, "fmt": "cr", "delta": rev_g, "delta_label": "YoY", "delta_fmt": "pct"},
         {"key": "pat", "label": "PAT · TTM", "value": pat_ttm, "fmt": "cr", "delta": pat_g, "delta_label": "YoY", "delta_fmt": "pct"},
     ]
-    if c.is_lender:
+    if c.is_insurer:
+        tiles.append({"key": "roe", "label": "ROE", "value": c.top.get("ROE"), "fmt": "pct"})
+        tiles.append({"key": "pat_margin", "label": "PAT / premium & income · TTM", "value": _r(_div(pat_ttm, rev_ttm) * 100) if _div(pat_ttm, rev_ttm) is not None else None, "fmt": "pct"})
+    elif c.is_lender:
         tiles.append({"key": "roe", "label": "ROE", "value": c.top.get("ROE"), "fmt": "pct"})
         nnpa = _last(q["nnpa"])
         if nnpa is not None:
@@ -266,7 +269,7 @@ def _trajectory(c: Company, q: dict, a: dict, snap: dict, facts: Facts) -> dict:
         if gap >= 4:
             text, tone = f"Profit has compounded faster than revenue over 3 years ({p3:.0f}% vs {s3:.0f}%): operating leverage is working.", "good"
         elif gap <= -4:
-            cost = "" if c.is_lender else ": growth is costing margin"
+            cost = "" if c.is_financial else ": growth is costing margin"
             text, tone = f"Profit has compounded slower than revenue over 3 years ({p3:.0f}% vs {s3:.0f}%){cost}.", "bad"
         else:
             text, tone = f"Profit and revenue have compounded at a similar pace over 3 years ({p3:.0f}% vs {s3:.0f}%).", "neutral"
@@ -280,7 +283,7 @@ def _trajectory(c: Company, q: dict, a: dict, snap: dict, facts: Facts) -> dict:
         ids.append(facts.add("trajectory", f"Quarterly revenue growth has {word} over the last four quarters: {path} YoY.",
                              "good" if direction == "up" else "bad", path=recent))
 
-    if not c.is_lender:
+    if not c.is_financial:
         opm_now, opm_then = q["opm"][-1], (q["opm"][-5] if len(q["opm"]) >= 5 else None)
         if opm_now is not None and opm_then is not None:
             delta = round(opm_now - opm_then, 1)
@@ -338,7 +341,7 @@ def _balance_sheet(c: Company, q: dict, a: dict, bs: dict, snap: dict, facts: Fa
             ids.append(facts.add("balance_sheet", f"Borrowings are {cr(debt)} against equity of {cr(equity)}: debt/equity {de:.2f}×{then}.", tone,
                                  borrowings=debt, equity=equity, de=round(de, 2), de_then=_r(de_then, 2)))
             tiles.append({"key": "de", "label": "Debt / equity", "value": round(de, 2), "fmt": "x", "good_when": "low"})
-        op_ttm = snap["ttm"]["op_profit"]
+        op_ttm = None if c.is_insurer else snap["ttm"]["op_profit"]  # premium-based "operating profit" is not EBITDA
         if debt is not None and op_ttm and op_ttm > 0:
             ratio = round(debt / op_ttm, 1)
             tiles.append({"key": "debt_ebitda", "label": "Debt / EBITDA", "value": ratio, "fmt": "x1", "good_when": "low"})
@@ -396,6 +399,9 @@ def _balance_sheet(c: Company, q: dict, a: dict, bs: dict, snap: dict, facts: Fa
 
 def _cash(c: Company, a: dict, facts: Facts) -> dict:
     ids, tiles = [], []
+    if c.is_insurer:
+        ids.append(facts.add("cash", "Operating cash flow is not a useful quality test for an insurer — premiums received and claims paid flow through it. Judge earnings quality on solvency, embedded value and persistency, which the headline financials do not carry.", "neutral"))
+        return {"tiles": tiles, "facts": ids, "applicable": False}
     if c.is_lender:
         ids.append(facts.add("cash", "Operating cash flow is not a useful quality test for a lender — deposits and loans flow through it. Judge earnings quality on asset quality and provisioning instead.", "neutral"))
         return {"tiles": tiles, "facts": ids, "applicable": False}
@@ -446,7 +452,7 @@ def _cash(c: Company, a: dict, facts: Facts) -> dict:
 def _flags(c: Company, q: dict, facts: Facts) -> list[dict]:
     """Promote facts with a clear tone to flags, and add a few cross-cutting checks."""
     other, pbt = _sum(q["other_income"][-4:]), _sum(q["pbt"][-4:])
-    if not c.is_lender and other is not None and pbt and pbt > 0 and other / pbt >= 0.3:
+    if not c.is_financial and other is not None and pbt and pbt > 0 and other / pbt >= 0.3:
         share = round(other / pbt * 100)
         facts.add("cash", f"Other income is {share}% of pre-tax profit over the last twelve months — earnings lean on non-operating items.", "bad", other_income_share_pct=share)
     tax = c.quarters.row("Tax %")
@@ -466,6 +472,7 @@ def build(c: Company) -> dict:
     flags = _flags(c, q, facts)
     return {
         "is_lender": c.is_lender,
+        "is_insurer": c.is_insurer,
         "fy_end_month": c.fy_end_month,
         "snapshot": snapshot,
         "trajectory": trajectory,
