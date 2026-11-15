@@ -133,15 +133,29 @@ def _probe(url: str, method: str = "HEAD") -> bool:
         return False
 
 
+_model_error: dict = {"detail": None}
+
+
 def _model_reachable() -> bool:
-    key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    """Probe the model API. On failure, keep Google's status and message (never the key) for /api/health."""
+    key = (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
+    _model_error["detail"] = None
     if not key:
+        _model_error["detail"] = "no key configured"
         return False
     try:
         resp = requests.get("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1", headers={"x-goog-api-key": key}, timeout=8)
-        return resp.status_code == 200
-    except requests.RequestException:
+    except requests.RequestException as exc:
+        _model_error["detail"] = f"network error: {type(exc).__name__}"
         return False
+    if resp.status_code == 200:
+        return True
+    try:
+        message = str(resp.json().get("error", {}).get("message", ""))
+    except ValueError:
+        message = resp.text
+    _model_error["detail"] = f"HTTP {resp.status_code}: {message.replace(key, '[key]')[:160]}; key length {len(key)}, starts '{key[:3]}'"
+    return False
 
 
 def health_body() -> dict:
@@ -160,6 +174,7 @@ def health_body() -> dict:
         "checks": checks,
         "limits": {"per_ip_per_hour": LIMITS.per_ip_per_hour, "per_day": LIMITS.per_day, "runs_today": GATE.today},
         "fast": checks["model_configured"] and checks["model_reachable"],  # kept for older clients
+        "model_error": _model_error["detail"],
     }
     _health_cache.update(at=time.time(), body=body)
     return {**body, "busy": GATE.running is not None}
