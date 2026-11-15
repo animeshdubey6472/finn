@@ -262,7 +262,24 @@ details.buried[open] summary::after { content: "Hide"; }
 .factlist li::before { content: ""; position: absolute; left: 2px; top: 15px; width: 7px; height: 7px; border-radius: 50%; background: var(--axis); }
 .factlist li.good::before { background: var(--good); }
 .factlist li.bad::before { background: var(--bad); }
-.ref { font-size: 10px; color: var(--ink-3); vertical-align: super; margin-left: 2px; cursor: help; }
+.ref { font-size: 10px; color: var(--ink-3); vertical-align: super; margin-left: 2px; }
+button.ref {
+  font: inherit; font-size: 10px; line-height: 1; color: var(--accent); background: none; border: 0; cursor: pointer;
+  display: inline-block; padding: 7px 7px; margin: -7px -4px -7px -2px; border-radius: 6px; /* ≥24px hit area, no extra line height */
+}
+button.ref[aria-expanded="true"] { background: var(--accent-soft); }
+.ref-id { cursor: default; }
+.ref-pop { display: block; margin: 8px 0 2px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); color: var(--ink-2); font-size: 12.5px; line-height: 1.4; font-style: normal; text-transform: none; letter-spacing: 0; }
+.ref-pop b { color: var(--accent); font-weight: 600; }
+li > .ref-pop { margin-left: 0; }
+
+.promised { margin-top: 12px; }
+.promised:empty { display: none; }
+.promised-h { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-3); margin-bottom: 6px; padding-top: 10px; border-top: 1px solid var(--line); }
+.promised-row { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; font-size: 13px; color: var(--ink-2); }
+.promised-row .pt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-width: 0; }
+.promised-row .pt b { color: var(--ink); font-weight: 600; }
+.promised-link { display: inline-block; margin-top: 6px; font-size: 13px; color: var(--accent); text-decoration: none; }
 
 .seg { display: flex; gap: 4px; margin: 4px 0 12px; background: var(--surface-2); padding: 3px; border-radius: 10px; }
 .seg button { flex: 1; border: 0; background: none; padding: 7px 4px; border-radius: 8px; font-size: 13px; cursor: pointer; color: var(--ink-2); }

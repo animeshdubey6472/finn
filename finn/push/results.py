@@ -56,10 +56,22 @@ def ebitda(col: dict, is_lender: bool) -> float | None:
     return pbt + finance + dep - (_num(col.get("other_income")) or 0.0)
 
 
+def net_revenue(col: dict) -> float | None:
+    """Revenue net of excise duty when the filing prints excise separately (tobacco, liquor, fuel).
+
+    Gross revenue then includes a pass-through tax, which understates every margin; standardized
+    data reports the net figure. EBITDA is unaffected (excise sits in both revenue and expenses).
+    """
+    revenue, excise = _num(col.get("revenue")), _num(col.get("excise_duty"))
+    if revenue is None or not excise or excise <= 0 or excise >= revenue:
+        return revenue
+    return revenue - excise
+
+
 def _column(col: dict, factor: float, is_lender: bool) -> dict:
     scale = lambda v: None if v is None else round(v * factor, 2)  # noqa: E731
     return {
-        "revenue": scale(_num(col.get("revenue"))),
+        "revenue": scale(net_revenue(col)),
         "ebitda": scale(ebitda(col, is_lender)),
         "pbt": scale(_num(col.get("pbt")) if _num(col.get("pbt")) is not None else _num(col.get("pbt_before_exceptional"))),
         "pat": scale(_num(col.get("pat"))),
@@ -142,6 +154,10 @@ def build_card(raw: dict, company: Company | None = None) -> dict | None:
         metrics.append(entry)
 
     period = periods.from_key(str(raw.get("period_end", "")))
+    flags = [str(f)[:120] for f in (raw.get("flags") or [])][:3]
+    excise = _num((raw.get("current") or {}).get("excise_duty"))
+    if excise and excise > 0 and current["revenue"] is not None:
+        flags.insert(0, f"Revenue shown net of excise duty (₹{round(excise * factor):,} cr this quarter)")
     card = {
         "type": "results",
         "source": "filing",
@@ -154,7 +170,7 @@ def build_card(raw: dict, company: Company | None = None) -> dict | None:
         "page": raw.get("page"),
         "current": current,
         "metrics": metrics,
-        "flags": [str(f)[:120] for f in (raw.get("flags") or [])][:3],
+        "flags": flags[:3],
         "checks": _self_checks(raw),
     }
     card["reconciliation"] = _reconcile(card, company)

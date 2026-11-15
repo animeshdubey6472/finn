@@ -55,6 +55,10 @@ Every one of these was found by reading real output, not by tests passing.
 | Alerts | A −0.5% day with the Nifty −0.6% was labelled "stock-specific" | Compares the stock's move with the market's before saying so |
 | Results card | Indian number formatting rounded 952.5 down to 952 | Half-up rounding (caught by a unit test) |
 | Bio lookup | Web-grounded background search silently returned nothing | Grounding is not in the Gemini free tier for current models — made it opt-in and said so in the README |
+| IndiGo ledger | "Mid-teens improvement in unit revenue" scored as company revenue growth | Extraction rules: per-unit measures are never company revenue growth |
+| HAL ledger | EBITDA margin "behind" (24.9% vs 30–31%) only because other income was excluded | When a margin verdict depends on the EBITDA definition, both numbers are shown instead |
+| ITC results | Revenue included excise duty (₹30,578 cr vs ₹20,269 cr net) — caught by the reconciliation badge | Excise is netted from revenue; card now matches standardized data |
+| All companies | 8 of 42 transcripts silently dropped — the model wrapped its answer in a one-item list | Unwrapped at the client; recovered from cache at no extra cost |
 | Final review | The deployed app measured "last 24h" from today's date, so it would look empty a day after publishing | Windows are measured from the snapshot time, shown in the header |
 | Final review | README overstated traceability and used a symbol (TATAMOTORS) that no longer exists | Claims corrected; example replaced; limitations section added |
 

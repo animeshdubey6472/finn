@@ -315,6 +315,30 @@ function peopleBlock(enr) {
       p.reason ? h("div", { class: "tiny muted" }, `Reason given: ${p.reason}`) : null)));
 }
 
+/** For a results card: the company's promises still in play, pulled from its research file.
+ *  Renders nothing until (and unless) the research loads, so it never blocks the card. */
+function promisesFor(sym) {
+  const wrap = h("div", { class: "promised" });
+  const known = state.index.find(r => r.symbol === sym);
+  if (!known) return wrap;
+  const rank = { behind: 0, on_track: 1, open: 2 };
+  const fill = d => {
+    const live = (d.guidance || []).filter(g => g.verdict.status in rank)
+      .sort((a, b) => ((a.scope === "segment") - (b.scope === "segment")) || rank[a.verdict.status] - rank[b.verdict.status] || b.call.localeCompare(a.call))
+      .slice(0, 3);
+    if (!live.length) return;
+    wrap.append(
+      h("div", { class: "promised-h" }, "What management promised"),
+      ...live.map(g => h("div", { class: "promised-row" },
+        h("span", { class: `vchip ${g.verdict.status}` }, g.verdict.status === "open" ? "not due" : g.verdict.status.replace("_", " ")),
+        h("span", { class: "pt" }, h("b", {}, g.label), " — ", g.verdict.detail))),
+      h("a", { class: "promised-link", href: `#/c/${encodeURIComponent(sym)}` }, "Full promise ledger →"));
+  };
+  if (state.research.has(sym)) fill(state.research.get(sym));
+  else getJSON(`data/research/${known.file}`).then(d => { state.research.set(sym, d); fill(d); }).catch(() => { /* card stands alone */ });
+  return wrap;
+}
+
 function itemCard(item) {
   const seen = state.seen.has(item.id);
   const enr = item.enrichment;
@@ -324,6 +348,7 @@ function itemCard(item) {
     h("h3", {}, title),
     item.why ? h("p", { class: "why" }, item.why) : (item.source_text && item.source_text !== title ? h("p", { class: "why" }, item.source_text) : null),
     enr?.type === "results" ? resultsBlock(enr, item.why || "") : null,
+    enr?.type === "results" ? promisesFor(item.symbol) : null,
     enr?.type === "people" ? peopleBlock(enr) : null,
     item.facts?.length ? h("div", { class: "facts" }, item.facts.map(f => h("span", { class: "fact" }, `${f.label}: `, h("b", {}, f.value)))) : null,
     foot(item));
@@ -363,6 +388,7 @@ function knowRow(item) {
     const enr = item.enrichment;
     wrap.append(h("div", { class: "row-detail" },
       enr?.type === "results" ? resultsBlock(enr, item.why || "") : null,
+      enr?.type === "results" ? promisesFor(item.symbol) : null,
       enr?.type === "people" ? peopleBlock(enr) : null,
       item.facts?.length ? h("div", { class: "facts" }, item.facts.map(f => h("span", { class: "fact" }, `${f.label}: `, h("b", {}, f.value)))) : null,
       h("div", { style: "margin-top:8px" }, h("a", { href: item.url, target: "_blank", rel: "noopener" }, "Open filing ↗"), " · ", h("a", { href: `#/c/${encodeURIComponent(item.symbol)}` }, `${item.symbol} research`))));
@@ -470,14 +496,42 @@ function viewResearchHome() {
 }
 
 // ---------------------------------------------------------------- company research view
+/** Reference chips (f12, g3, c7). Hover shows a title on desktop; tap/click toggles the cited
+ *  text inline under the line, so citations work on phones where hover does not exist. */
 function refChips(refs, lookup) {
-  return (refs || []).map(r => h("span", { class: "ref", title: lookup.get(r) || r }, r));
+  return (refs || []).map(r => {
+    const text = lookup.get(r) || "Not found in this research file.";
+    const btn = h("button", { type: "button", class: "ref", title: text, "aria-expanded": "false", "aria-label": `Show source fact ${r}` }, r);
+    btn.addEventListener("click", e => {
+      e.stopPropagation();
+      const host = btn.closest("li, .nvn > div, p, .card") || btn.parentElement;
+      const existing = host.querySelector(`:scope > .ref-pop[data-ref="${r}"]`);
+      if (existing) { existing.remove(); btn.setAttribute("aria-expanded", "false"); return; }
+      host.append(h("div", { class: "ref-pop", role: "note", "data-ref": r }, h("b", {}, `${r} `), text));
+      btn.setAttribute("aria-expanded", "true");
+    });
+    return btn;
+  });
 }
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  document.querySelectorAll(".ref-pop").forEach(pop => pop.remove());
+  document.querySelectorAll('button.ref[aria-expanded="true"]').forEach(b => b.setAttribute("aria-expanded", "false"));
+});
 function tileEl(t) {
   const fmt = { cr: cr, pct: v => `${v.toFixed(1)}%`, pct0: v => `${v.toFixed(0)}%`, pct2: v => `${v.toFixed(2)}%`, x: v => `${v.toFixed(2)}×`, x1: v => `${v.toFixed(1)}×`, days: v => `${v.toFixed(0)} days` }[t.fmt] || (v => v);
   const dfmt = t.delta_fmt === "pp" ? sp(t.delta, 1, " pp") : sp(t.delta, 0);
   return h("div", { class: "tile" }, h("div", { class: "l" }, t.label), h("div", { class: "v" }, t.value == null ? "—" : fmt(t.value)),
     t.delta != null ? h("div", { class: `d ${dirClass(t.delta, t.good_when !== "low")}` }, `${dfmt} ${t.delta_label || ""}`) : null);
+}
+
+/** "Check at FY27 results" / "Check at Q3 FY27 results", or the stated horizon. */
+function nextCheckpoint(x) {
+  if (x.target_fy) {
+    const fy = `FY${String(x.target_fy % 100).padStart(2, "0")}`;
+    return `Check at ${x.target_quarter ? `Q${x.target_quarter} ${fy}` : fy} results`;
+  }
+  return x.horizon ? `Horizon: ${x.horizon}` : null;
 }
 
 function ledgerSection(d) {
@@ -492,6 +546,24 @@ function ledgerSection(d) {
     h("div", { class: "verdict" }, h("span", { class: `vchip ${x.verdict.status}` }, x.verdict.status.replace("_", " ")), h("span", {}, x.verdict.detail)),
     x.quote ? h("blockquote", {}, `“${x.quote}” `, h("a", { href: pageLink(x.url, x.page), target: "_blank", rel: "noopener", style: "color:var(--accent);font-style:normal" }, `p.${x.page} ↗`)) : null);
   const hit = sc.hit_rate_pct;
+  if (!sc.scored) {
+    // Nothing is checkable yet: a 0/0/0/0 grid would read as "broken". Show what to watch and when.
+    const due = g.filter(x => x.verdict.status === "open"), rest = g.filter(x => x.verdict.status !== "open");
+    const watchItem = x => h("div", { class: "promise" },
+      h("div", { class: "top-line" }, h("span", { class: "label" }, x.label), h("span", { class: "when" }, `${x.quarter} call`)),
+      h("div", { class: "said" }, x.statement),
+      h("div", { class: "verdict" }, h("span", { class: "vchip open" }, x.verdict.status === "open" ? "not due" : "watch"),
+        h("span", {}, nextCheckpoint(x) || x.verdict.detail)),
+      nextCheckpoint(x) ? h("div", { class: "tiny muted", style: "margin-top:4px" }, x.verdict.detail) : null,
+      x.quote ? h("blockquote", {}, `“${x.quote}” `, h("a", { href: pageLink(x.url, x.page), target: "_blank", rel: "noopener", style: "color:var(--accent);font-style:normal" }, `p.${x.page} ↗`)) : null);
+    return [
+      h("h2", {}, "Promise ledger ", h("span", { class: "count" }, `${g.length} commitments · ${d.coverage.transcripts_read} calls`)),
+      h("div", { class: "card small" },
+        h("p", {}, h("b", {}, `Nothing here is checkable against headline numbers yet — ${g.length} commitment${g.length === 1 ? "" : "s"} to watch.`)),
+        h("p", { class: "muted", style: "margin-top:4px" }, "A verdict appears once the target period is reported and the promise is on a line the financials carry (revenue, EBITDA, PAT and their growth or margins, capex, gross debt, bank deposits). Order books, capacity, segment and ratio targets stay on watch.")),
+      h("div", { class: "rows" }, [...due, ...rest].map(watchItem)),
+    ];
+  }
   return [
     h("h2", {}, "Promise ledger ", h("span", { class: "count" }, `${g.length} commitments · ${d.coverage.transcripts_read} calls`)),
     h("div", { class: "score", role: "group", "aria-label": "Ledger scorecard" },
@@ -533,7 +605,8 @@ function fundamentalsSection(d) {
   const tabs = [["snapshot", "Snapshot"], ["trajectory", "Trend"], ["balance", "Balance"], ["cash", "Cash"]];
   let current = store.get("ftab", "snapshot");
   const body = h("div", {});
-  const factsFor = section => h("ul", { class: "factlist" }, f.facts.filter(x => x.section === section).map(x => h("li", { class: x.tone }, x.text, h("span", { class: "ref" }, x.id))));
+  const factsFor = section => h("ul", { class: "factlist" }, f.facts.filter(x => x.section === section).map(x =>
+    h("li", { class: x.tone, id: `fact-${x.id}` }, x.text, h("span", { class: "ref ref-id", title: `Fact ${x.id} — cited by the analysis above` }, x.id))));
   const draw = () => {
     seg.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.k === current)));
     let content;

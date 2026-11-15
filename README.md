@@ -117,10 +117,12 @@ logged with tokens and list-price cost (`web/data/meta.json`, and the Alerts tab
   maintenance and will mis-sort novel phrasing — mitigated by a "no rule matched → read it"
   default and by letting the model move items across tiers (with guard rails: a results filing
   can't be demoted, paperwork can't be promoted).
-- **Score only what is checkable.** The ledger scores revenue growth, operating margin, PAT
-  growth/margin, rupee revenue targets and annual capex. Order books, store counts, segment
-  targets and "we'll outgrow the market" stay as *watch items*. A wrong verdict would be worse
-  than none.
+- **Score only what is checkable, like for like.** The ledger scores company-level revenue,
+  EBITDA and PAT targets (as growth, margin or rupees), annual capex, gross-debt ceilings and, for
+  banks, deposit growth. Each commitment is extracted with its scope (company or segment) and,
+  for margins, its basis (EBITDA, EBIT, PAT); only like-for-like promises get a verdict.
+  Order books, capacity, segment targets, ratios and "we'll outgrow the market" stay as *watch
+  items*, each with its next checkpoint. A wrong verdict would be worse than none.
 - **Fundamentals from standardized data, narrative from primary documents.** Multi-year
   financials come from screener's standardized tables (consistent across companies, cheap);
   guidance and claims come only from transcripts and annual reports. No news, broker notes or
@@ -144,9 +146,13 @@ logged with tokens and list-price cost (`web/data/meta.json`, and the Alerts tab
 ## Known limitations (measured, not guessed)
 
 - **The ledger scores only what headline financials can check.** Across the seven demo
-  companies, a minority of extracted commitments get a verdict; the rest (order books, capacity,
-  segment targets, store counts, "outgrow the market") are shown as watch items. Large
-  conglomerates and banks guide mostly on such items, so their scorecards are sparse.
+  companies, 12 of 114 extracted commitments (11%) get a verdict; the rest (order books, capacity,
+  segment targets, store counts, "outgrow the market") are shown as watch items with their next
+  checkpoint. Reliance, HDFC Bank, Titan and IndiGo guide almost entirely on such items, so their
+  ledgers show watch lists rather than verdicts. Widening the checkable metrics (debt, rupee
+  EBITDA/PAT, bank deposits) made verdicts more correct but did not raise coverage for this set.
+- **EBITDA definitions differ.** Some companies count other income inside EBITDA. When a margin
+  promise is met only under one definition, FINN shows both numbers instead of a verdict.
 - **Revenue definitions differ.** Some companies (ITC, for one) print revenue *including* excise
   duty in the filing, while standardized data reports it net. FINN's reconciliation flags the
   gap on the card ("differs from standardized data") rather than silently choosing one.

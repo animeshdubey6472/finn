@@ -23,6 +23,9 @@ from ..periods import Period
 GROWTH_TOLERANCE = 1.0   # percentage points: "12-14%" is met at 11.0
 MARGIN_TOLERANCE = 0.5   # percentage points
 SCORED = ("delivered", "missed", "on_track", "behind")
+SCORABLE = {"revenue_growth", "revenue", "ebitda", "pat", "operating_margin", "pat_growth", "pat_margin", "capex", "debt", "deposit_growth"}
+LEVEL_KEYS = {"revenue_growth": ("revenue", "revenue"), "revenue": ("revenue", "revenue"), "pat_growth": ("pat", "PAT"),
+              "pat": ("pat", "PAT"), "ebitda": ("op_profit", "EBITDA")}
 
 
 class Financials:
@@ -36,12 +39,15 @@ class Financials:
         for i, label in enumerate(q["labels"]):
             period = periods.parse_label(label)
             if period and q["revenue"][i] is not None:
-                self.q[period] = {"revenue": q["revenue"][i], "op_profit": q["op_profit"][i], "pat": q["pat"][i]}
+                self.q[period] = {"revenue": q["revenue"][i], "op_profit": q["op_profit"][i], "pat": q["pat"][i],
+                                  "other_income": (q.get("other_income") or [None] * len(q["labels"]))[i]}
         self.a: dict[Period, dict] = {}
         for i, label in enumerate(a["labels"]):
             period = periods.parse_label(label)
             if period and a["revenue"][i] is not None:
-                self.a[period] = {"revenue": a["revenue"][i], "op_profit": a["op_profit"][i], "pat": a["pat"][i], "capex": a["capex"][i]}
+                self.a[period] = {"revenue": a["revenue"][i], "op_profit": a["op_profit"][i], "pat": a["pat"][i], "capex": a["capex"][i],
+                                  "borrowings": (a.get("borrowings") or [None] * len(a["labels"]))[i],
+                                  "deposits": (a.get("deposits") or [None] * len(a["labels"]))[i]}
         self.latest_quarter: Period | None = max(self.q) if self.q else None
 
     # -- period arithmetic ---------------------------------------------------------
@@ -72,6 +78,9 @@ class Financials:
         if metric == "pat_margin":
             pat, rev = self._sum(quarters, "pat"), self._sum(quarters, "revenue")
             return None if pat is None or not rev else pat / rev * 100
+        if metric == "operating_margin_incl_other_income":
+            op, oi, rev = self._sum(quarters, "op_profit"), self._sum(quarters, "other_income"), self._sum(quarters, "revenue")
+            return None if op is None or oi is None or not rev else (op + oi) / rev * 100
         return None
 
     def annual_measure(self, metric: str, fy: int) -> float | None:
@@ -147,9 +156,14 @@ def score(item: dict, fin: Financials, call_period_end: Period) -> dict:
         return _verdict("unmeasured", f"Guided on {basis.upper()} margin; the headline financials report operating (EBITDA) margin, so they are not comparable.")
     if metric == "pat_margin" and basis and basis not in {"pat"}:
         return _verdict("unmeasured", f"Guided on {basis.upper()} margin, which is not PAT margin.")
-    if fin.is_lender and metric in {"operating_margin"}:
-        return _verdict("unmeasured", "Operating margin is not reported for lenders in the standardized financials.")
-    if metric not in {"revenue_growth", "operating_margin", "pat_growth", "pat_margin", "capex"}:
+    # "revenue"/"pat" given as a percentage are growth targets; as rupees they are level targets.
+    if metric in {"revenue", "pat"} and item.get("unit") in {"pct", "bps"}:
+        metric = f"{metric}_growth"
+    if fin.is_lender and metric in {"operating_margin", "ebitda"}:
+        return _verdict("unmeasured", "Operating margin and EBITDA are not meaningful for lenders in the standardized financials.")
+    if metric == "deposit_growth" and not fin.is_lender:
+        return _verdict("unmeasured", "Deposit growth applies to banks only.")
+    if metric not in SCORABLE:
         return _verdict("unmeasured", "Not checkable against headline financials; kept as a watch item.")
 
     # ---- which reported periods does the promise refer to? --------------------------------
@@ -162,8 +176,8 @@ def score(item: dict, fin: Financials, call_period_end: Period) -> dict:
         target = fin.fy_quarters(fy)[quarter - 1]
         if target <= call_period_end:
             return _verdict("unmeasured", "Refers to a period already reported when it was said.")
-        if metric == "capex":
-            return _verdict("unmeasured", "Quarterly capex is not in the standardized financials.")
+        if metric in {"capex", "debt", "deposit_growth"}:
+            return _verdict("unmeasured", f"Quarterly {metric_name(metric)} is not in the standardized financials (year-end only).")
         if target not in fin.q:
             return _verdict("open", f"{periods.fiscal_label(target, fin.fy_end_month)} has not been reported yet.")
         scope, quarters, complete = periods.fiscal_label(target, fin.fy_end_month), [target], True
@@ -184,6 +198,10 @@ def score(item: dict, fin: Financials, call_period_end: Period) -> dict:
             status = "delivered" if low * 0.85 <= actual <= top * 1.15 else "missed"
             side = "in line with" if status == "delivered" else ("above" if actual > top else "below")
             return _verdict(status, f"{fy_name} capex was about ₹{actual:,.0f} cr, {side} the {_range_text(item)} guided.", actual=round(actual), actual_label=f"{fy_name} capex", target=_range_text(item))
+        if metric == "debt":
+            return _score_debt(item, fin, fy, fy_name)
+        if metric == "deposit_growth":
+            return _score_deposits(item, fin, fy, fy_name)
         if not done:
             return _verdict("open", f"No {fy_name} quarter has been reported yet.")
         complete = len(done) == 4
@@ -191,9 +209,8 @@ def score(item: dict, fin: Financials, call_period_end: Period) -> dict:
         scope = fy_name if complete else f"{fy_name} so far ({len(done)} of 4 quarters)"
 
     # ---- rupee targets for revenue or PAT ("₹4,500 cr revenue in FY26") ---------------------
-    if item.get("unit") == "inr_cr" and metric in {"revenue_growth", "pat_growth"} and low is not None:
-        key = "revenue" if metric == "revenue_growth" else "pat"
-        noun = "revenue" if key == "revenue" else "PAT"
+    if item.get("unit") == "inr_cr" and metric in LEVEL_KEYS and low is not None:
+        key, noun = LEVEL_KEYS[metric]
         if quarter:
             actual = fin.q.get(quarters[0], {}).get(key)
         elif complete:
@@ -205,6 +222,9 @@ def score(item: dict, fin: Financials, call_period_end: Period) -> dict:
         met = actual >= low * 0.98
         status = "delivered" if met else "missed"
         return _verdict(status, f"{scope}: {noun} ₹{actual:,.0f} cr against {_range_text(item)} guided.", actual=round(actual), actual_label=f"{scope} {noun}, ₹ cr", target=_range_text(item))
+
+    if metric in {"revenue", "pat", "ebitda"}:
+        return _verdict("unmeasured", f"An absolute {metric_name(metric)} target needs a rupee figure; none was given.")
 
     # ---- directional promise without a number ---------------------------------------------
     if not numeric:
@@ -236,6 +256,14 @@ def score(item: dict, fin: Financials, call_period_end: Period) -> dict:
         status = ("delivered" if met else "missed") if complete else ("on_track" if met else "behind")
     else:
         status = _compare(metric, actual, low, high, complete)
+    # Some companies count other income inside EBITDA; the standardized operating margin does not.
+    # If the promise is missed only under our definition, say so instead of issuing a verdict.
+    if metric == "operating_margin" and status in {"missed", "behind"}:
+        inclusive = fin.measure("operating_margin_incl_other_income", quarters)
+        if inclusive is not None and inclusive >= low - MARGIN_TOLERANCE:
+            return _verdict("unmeasured", f"{scope}: operating margin {actual:.1f}% excluding other income, {inclusive:.1f}% including it, "
+                            f"against {_range_text(item)} guided — met or missed depending on whether management counts other income in EBITDA.",
+                            actual=round(actual, 1), actual_label=scope, target=_range_text(item))
     detail = f"{scope}: {metric_name(metric)} {_fmt_actual(metric, actual)} against {_range_text(item)} guided."
     if status == "delivered" and high is not None and actual > high + (MARGIN_TOLERANCE if metric.endswith("margin") else GROWTH_TOLERANCE):
         detail = detail[:-1] + " — ahead of the range."
@@ -245,6 +273,45 @@ def score(item: dict, fin: Financials, call_period_end: Period) -> dict:
             left = 4 - len(quarters)
             detail += f" The remaining {left} quarter{'s' if left != 1 else ''} must grow {needed:+.0f}% to get there."
     return _verdict(status, detail, actual=round(actual, 1), actual_label=scope, target=_range_text(item))
+
+
+def _score_debt(item: dict, fin: Financials, fy: int, fy_name: str) -> dict:
+    """Gross-borrowing ceilings ("debt below ₹500 cr by FY27") against the year-end balance sheet."""
+    text = f"{item.get('statement', '')} {item.get('label', '')}".lower()
+    low, high = item.get("low"), item.get("high")
+    if "net debt" in text or "net cash" in text or "net of cash" in text:
+        return _verdict("unmeasured", "A net-debt target needs cash balances, which the headline balance sheet does not separate.")
+    if item.get("unit") != "inr_cr" or low is None:
+        return _verdict("unmeasured", "No rupee figure for the debt target.")
+    if (high if high is not None else low) <= 0:
+        return _verdict("unmeasured", "'Debt-free' usually means net of cash, which the headline balance sheet does not separate.")
+    if item.get("direction") == "up":
+        return _verdict("unmeasured", "A plan to raise debt is not a promise to check.")
+    year = fin.a.get(fin.fy_end(fy)) or {}
+    actual = year.get("borrowings")
+    if actual is None:
+        return _verdict("open", f"The {fy_name} balance sheet has not been reported yet.")
+    ceiling = high if high is not None else low
+    status = "delivered" if actual <= ceiling * 1.05 else "missed"
+    return _verdict(status, f"{fy_name} year-end borrowings were ₹{actual:,.0f} cr against a target of {_range_text(item)}.",
+                    actual=round(actual), actual_label=f"{fy_name} borrowings, ₹ cr", target=_range_text(item))
+
+
+def _score_deposits(item: dict, fin: Financials, fy: int, fy_name: str) -> dict:
+    """Deposit growth for banks, measured on year-end deposits."""
+    low = item.get("low")
+    if item.get("unit") != "pct" or low is None:
+        return _verdict("unmeasured", "No percentage target for deposit growth.")
+    end = fin.fy_end(fy)
+    now, then = (fin.a.get(end) or {}).get("deposits"), (fin.a.get(periods.shift(end, -12)) or {}).get("deposits")
+    if now is None:
+        return _verdict("open", f"Deposit growth is measured on the {fy_name} year-end balance sheet, not reported yet.")
+    if not then:
+        return _verdict("unmeasured", "No prior year-end deposits to measure growth against.")
+    growth = (now / then - 1) * 100
+    status = "delivered" if growth >= low - GROWTH_TOLERANCE else "missed"
+    return _verdict(status, f"{fy_name}: deposits grew {growth:+.1f}% against {_range_text(item)} guided.",
+                    actual=round(growth, 1), actual_label=f"{fy_name} deposit growth", target=_range_text(item))
 
 
 def _status_for_change(change_bps: float, low: float, complete: bool, direction: str | None) -> str:
@@ -275,7 +342,8 @@ def _directional(item: dict, fin: Financials, base: Period, quarters: list[Perio
 
 
 def metric_name(metric: str) -> str:
-    return {"revenue_growth": "revenue growth", "operating_margin": "operating margin", "pat_growth": "PAT growth", "pat_margin": "PAT margin", "capex": "capex"}.get(metric, metric.replace("_", " "))
+    return {"revenue_growth": "revenue growth", "operating_margin": "operating margin", "pat_growth": "PAT growth", "pat_margin": "PAT margin",
+            "capex": "capex", "ebitda": "EBITDA", "pat": "PAT", "debt": "debt", "deposit_growth": "deposit growth"}.get(metric, metric.replace("_", " "))
 
 
 def _fmt_actual(metric: str, value: float) -> str:

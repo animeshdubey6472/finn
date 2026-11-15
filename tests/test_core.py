@@ -197,3 +197,49 @@ def test_model_output_wrapped_in_list_is_unwrapped():
     from finn.llm import _unwrap, extract_json
     assert _unwrap(extract_json('[{"guidance": []}]')) == {"guidance": []}
     assert _unwrap([{"a": 1}, {"b": 2}]) == [{"a": 1}, {"b": 2}]
+
+
+def test_revenue_net_of_excise():
+    raw = {**KAYNES_RAW, "unit": "crore",
+           "current": {**KAYNES_RAW["current"], "revenue": 30578.4, "excise_duty": 10309.4, "total_expenses": 9003.97 + 10309.4}}
+    card = results.build_card(raw)
+    m = {x["key"]: x for x in card["metrics"]}
+    assert m["revenue"]["value"] == pytest.approx(20269.0, abs=0.1)
+    assert card["flags"][0].startswith("Revenue shown net of excise")
+
+
+def _fund_with_bs(**annual):
+    fund = _fund([100, 100, 100, 100, 110, 112], [15] * 6, [10] * 6, ["Jun 2025"] + QL)
+    base = {"labels": ["Mar 2025", "Mar 2026"], "revenue": [380, 400], "op_profit": [57, 60], "pat": [38, 40], "capex": [10, 12],
+            "borrowings": [900, 450], "deposits": [1000, 1150]}
+    base.update(annual)
+    fund["series"]["annual"] = base
+    return fund
+
+
+def test_debt_ceiling_scored_on_year_end_borrowings():
+    fin = ledger.Financials(_fund_with_bs())
+    v = ledger.score(_g(metric="debt", target_fy=2026, low=500, high=500, unit="inr_cr", statement="Debt below ₹500 cr by year end"), fin, (2025, 6))
+    assert v["status"] == "delivered" and "₹450 cr" in v["detail"]
+    net = ledger.score(_g(metric="debt", target_fy=2026, low=0, high=0, unit="inr_cr", statement="We will be net debt free"), fin, (2025, 6))
+    assert net["status"] == "unmeasured"
+
+
+def test_ebitda_rupee_target_and_deposit_growth():
+    fin = ledger.Financials(_fund_with_bs())
+    assert ledger.score(_g(metric="ebitda", target_fy=2026, low=70, high=70, unit="inr_cr"), fin, (2025, 6))["status"] == "missed"
+    lender = _fund_with_bs(); lender["is_lender"] = True
+    v = ledger.score(_g(metric="deposit_growth", target_fy=2026, low=14, high=16, unit="pct"), ledger.Financials(lender), (2025, 6))
+    assert v["status"] == "delivered" and "+15.0%" in v["detail"]
+
+
+def test_revenue_metric_in_percent_is_growth():
+    fin = ledger.Financials(_fund([100, 100, 100, 100, 110, 112], [15] * 6, [10] * 6, ["Jun 2025"] + QL))
+    assert ledger.score(_g(metric="revenue", low=8, high=10, unit="pct"), fin, (2026, 3))["status"] == "on_track"
+
+
+def test_margin_miss_that_depends_on_other_income_is_not_a_verdict():
+    fund = _fund([100, 100, 100, 100, 100, 100], [25] * 6, [10] * 6, ["Jun 2025"] + QL)
+    fund["series"]["quarterly"]["other_income"] = [6] * 6
+    v = ledger.score(_g(metric="operating_margin", low=30, high=31, margin_basis="ebitda"), ledger.Financials(fund), (2026, 3))
+    assert v["status"] == "unmeasured" and "including it" in v["detail"]

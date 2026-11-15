@@ -33,7 +33,7 @@ Return JSON:
   "facts": [{{"label": "<= 3 words", "value": "<= 6 words, a number or name from the filing"}}]  // 0-4 facts an investor would want at a glance
 }}"""
 
-RESULTS_V = "results/4"
+RESULTS_V = "results/5"
 RESULTS_SYSTEM = f"""You transcribe headline numbers from an Indian company's quarterly financial-results filing.
 {GROUNDING}
 
@@ -42,6 +42,7 @@ Rules:
 - Use the three single-quarter columns: the current quarter, the immediately preceding quarter, and the same quarter of the previous year. Ignore half-year, nine-month and full-year columns.
 - Copy figures exactly as printed, in the filing's own unit. Brackets mean negative. Do not compute, convert or round anything.
 - "revenue" is Revenue from operations (for a bank or NBFC: Total income). "pat" is Profit/(loss) for the period after tax, before other comprehensive income.
+- "excise_duty": if the statement prints an "Excise duty" (or "Excise duty on sale of goods") line, copy it; otherwise null. Do not subtract it yourself.
 - "total_expenses" is the Total expenses line. "pbt_before_exceptional" is profit before exceptional items and tax (and before share of associates, if shown separately). "pbt" is profit before tax after exceptional items.
 - For a bank or NBFC set "is_lender": true and fill "operating_profit" with Operating profit before provisions and contingencies (pre-provision operating profit) if printed.
 
@@ -52,7 +53,7 @@ Return JSON:
   "period_end": "YYYY-MM",            // month the current quarter ended
   "is_lender": true | false,
   "page": <page number of the statement used>,
-  "current":          {{"label": "<column heading>", "revenue": n, "other_income": n, "total_expenses": n, "finance_costs": n, "depreciation": n, "operating_profit": n|null, "pbt_before_exceptional": n, "exceptional_items": n|null, "pbt": n, "tax": n, "pat": n}},
+  "current":          {{"label": "<column heading>", "revenue": n, "excise_duty": n|null, "other_income": n, "total_expenses": n, "finance_costs": n, "depreciation": n, "operating_profit": n|null, "pbt_before_exceptional": n, "exceptional_items": n|null, "pbt": n, "tax": n, "pat": n}},
   "previous_quarter": {{ same keys }},
   "year_ago_quarter": {{ same keys }},
   "flags": ["<= 12 words each: only things printed in the filing that change how to read the numbers — restated prior periods, an exceptional item, a qualified audit/review opinion, a one-off"]  // 0-3 items
@@ -93,7 +94,7 @@ Reply with a single JSON object and nothing else:
 # PULL — reading one concall transcript
 # ---------------------------------------------------------------------------------------------
 
-TRANSCRIPT_V = "transcript/6"
+TRANSCRIPT_V = "transcript/7"
 TRANSCRIPT_SYSTEM = f"""You read one earnings-call transcript of an Indian listed company and pull out what management COMMITTED to and what it CLAIMED, so that both can later be checked against reported numbers.
 {GROUNDING}
 Page markers look like [p.7]. Every item needs the page it came from and a verbatim quote.
@@ -102,6 +103,8 @@ Definitions:
 - GUIDANCE = a forward-looking statement by management about a headline number: growth, margins, profit, capex, volumes, store/capacity additions, debt. Skip vague optimism with no measurable content.
 - CLAIM = management's description of what is happening now or why results came out as they did.
 - Quotes must be copied word-for-word from the transcript (<= 35 words). If you cannot quote it, leave the item out.
+- Metric meanings: "revenue_growth" = growth of TOTAL company revenue only. Per-unit or partial measures (unit revenue, yield, realisation, ARPU, same-store sales, volumes, one product's sales) are NOT revenue_growth — use "volume_growth" or "other". "revenue" / "ebitda" / "pat" = an absolute rupee target for the whole company (unit "inr_cr"). "debt" = a target for the level of borrowings (e.g. "debt below ₹500 cr", "debt-free"); say in the statement whether it is gross or net debt. "deposit_growth" / "loan_growth" = for banks and lenders.
+- Target year: if management says "this year", "the current year" or "for the full year" without naming it, set target_fy to the fiscal year in progress (given above). "Next year" is the one after it.
 - Scope matters: "the eyewear division will grow 13%" or "jewellery EBIT margin of 11%" is segment guidance, not company guidance. Mark it "segment" and name the segment.
 
 Return JSON:
@@ -109,7 +112,7 @@ Return JSON:
   "quarter": "e.g. Q2 FY27 — the quarter whose results this call discusses",
   "guidance": [                       // up to 8, most concrete first
     {{
-      "metric": "revenue_growth" | "operating_margin" | "pat_growth" | "pat_margin" | "capex" | "volume_growth" | "order_inflow" | "capacity" | "debt" | "other",
+      "metric": "revenue_growth" | "revenue" | "ebitda" | "pat" | "operating_margin" | "pat_growth" | "pat_margin" | "capex" | "debt" | "deposit_growth" | "loan_growth" | "volume_growth" | "order_inflow" | "capacity" | "other",
       "label": "<= 6 words, e.g. 'FY27 revenue growth'",
       "statement": "<= 28 words: the commitment in plain words",
       "quote": "verbatim",

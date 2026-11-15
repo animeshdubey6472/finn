@@ -14,8 +14,8 @@ from ..sources.screener import Company
 from .grounding import locate_quote
 
 MAX_CHARS = 240_000  # ~60k tokens; a long call is ~90k characters
-MEASURABLE = {"revenue_growth", "operating_margin", "pat_growth", "pat_margin", "capex"}
-METRICS = MEASURABLE | {"volume_growth", "order_inflow", "capacity", "debt", "other"}
+MEASURABLE = {"revenue_growth", "revenue", "ebitda", "pat", "operating_margin", "pat_growth", "pat_margin", "capex", "debt", "deposit_growth"}
+METRICS = MEASURABLE | {"loan_growth", "volume_growth", "order_inflow", "capacity", "other"}
 
 
 def _clean_number(value) -> float | None:

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-15T15:21:13+00:00",
+  "generated_at": "2026-11-15T15:41:11+00:00",
   "version": "0.1.0",
   "portfolio": [
     "RELIANCE",
@@ -40,58 +40,52 @@
     "search": []
   },
   "usage_run": {
-    "calls": 5,
-    "cache_hits": 35,
-    "tokens_in": 18949,
-    "tokens_out": 8262,
-    "list_cost_usd": 0.0335,
+    "calls": 1,
+    "cache_hits": 55,
+    "tokens_in": 4311,
+    "tokens_out": 3868,
+    "list_cost_usd": 0.0177,
     "by_task": {
       "transcript": {
         "calls": 0,
-        "cached": 30,
+        "cached": 42,
         "tokens_in": 0,
         "tokens_out": 0,
         "list_cost_usd": 0.0
       },
       "annual-report": {
         "calls": 0,
-        "cached": 5,
+        "cached": 7,
         "tokens_in": 0,
         "tokens_out": 0,
         "list_cost_usd": 0.0
       },
       "synthesis": {
-        "calls": 5,
-        "cached": 0,
-        "tokens_in": 18949,
-        "tokens_out": 8262,
-        "list_cost_usd": 0.03347
+        "calls": 1,
+        "cached": 6,
+        "tokens_in": 4311,
+        "tokens_out": 3868,
+        "list_cost_usd": 0.01774
       }
     },
     "by_model": {
-      "gemini-3.5-flash-lite": {
-        "calls": 4,
-        "tokens_in": 15445,
-        "tokens_out": 3824,
-        "list_cost_usd": 0.0142
-      },
       "gemini-3.6-flash": {
         "calls": 1,
-        "tokens_in": 3504,
-        "tokens_out": 4438,
-        "list_cost_usd": 0.01927
+        "tokens_in": 4311,
+        "tokens_out": 3868,
+        "list_cost_usd": 0.01774
       }
     }
   },
   "usage_total": {
-    "calls": 126,
-    "tokens_in": 1344459,
-    "tokens_out": 151408,
-    "list_cost_usd": 0.7191
+    "calls": 176,
+    "tokens_in": 2001117,
+    "tokens_out": 209712,
+    "list_cost_usd": 0.9895
   },
   "network": {
     "network": 0,
-    "cache": 40,
+    "cache": 56,
     "bytes": 0
   },
   "feed_stats": {
@@ -106,5 +100,5 @@
     "read_this_run": 5
   },
   "research_count": 7,
-  "seconds": 227.9
+  "seconds": 17.9
 }
