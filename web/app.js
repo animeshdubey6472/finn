@@ -692,7 +692,7 @@ function trustSection(d) {
       h("div", {}, h("b", {}, `${c.transcripts_read}`), `of ${c.transcripts_available} transcripts read`)),
     h("ul", { class: "sources" }, d.sources.map(src => h("li", {}, h("a", { href: src.url, target: "_blank", rel: "noopener" }, src.label), src.pages ? h("span", { class: "muted" }, ` · ${src.pages} pages`) : ""))),
     c.notes?.length ? h("p", { class: "tiny muted", style: "margin-top:8px" }, c.notes.join(" ")) : null,
-    h("p", { class: "tiny muted", style: "margin-top:8px" }, `Generated ${new Date(d.generated_at).toLocaleString("en-IN")} · uses only company filings, annual reports and call transcripts — no news, broker notes or model knowledge.`))];
+    h("p", { class: "tiny muted", style: "margin-top:8px" }, `Generated ${new Date(d.generated_at).toLocaleString("en-IN")}${c.synthesis_model ? ` · analysis written by ${c.synthesis_model}` : ""} · uses only company filings, annual reports and call transcripts — no news, broker notes or model knowledge.`))];
 }
 
 function companyPage(d) {
@@ -851,3 +851,5 @@ async function boot() {
   if (state.api && (location.hash.startsWith("#/research") || location.hash.startsWith("#/c/"))) render();
 }
 boot();
+// Installable app: network first, last snapshot when offline. Not registered for the local dev server.
+if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});

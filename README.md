@@ -34,6 +34,23 @@ fundamentals, and results cards from standardized data.
 
 ---
 
+## 60-second tour
+
+| Today — an inbox you can clear | A results card, checked | The promise ledger | Narrative vs numbers |
+|---|---|---|---|
+| <img src="docs/screenshots/today.png" width="200" alt="Today screen"> | <img src="docs/screenshots/results-card.png" width="200" alt="Results card"> | <img src="docs/screenshots/promise-ledger.png" width="200" alt="Promise ledger"> | <img src="docs/screenshots/narrative-vs-numbers.png" width="200" alt="Narrative vs numbers"> |
+
+Three things to try on the [live app](https://animeshdubey6472.github.io/finn/) (on a phone):
+
+1. **Today → 3 days.** One filing needs you: Kaynes' Q2 results, read from the filing — revenue
+   ₹953 cr (+4% YoY), PAT ₹39.8 cr (−66%), EBITDA margin down 320 bps — with what management
+   promised underneath. The routine paperwork is collapsed into a count.
+2. **Research → KAYNES.** The promise ledger: FY26 revenue guided at ₹4,500 cr, delivered ₹3,626 cr
+   (missed); margin expansion promised 50 bps, delivered 84 bps. Each quote links to its transcript
+   page. Then compare HAL, where a margin promise is shown with both EBITDA definitions instead of
+   a verdict.
+3. **Alerts.** Drag the price-move slider and watch how many alerts a month you would get.
+
 ## What's on screen
 
 **Today** — a one-line briefing ("3 things need you across 2 companies"), then:

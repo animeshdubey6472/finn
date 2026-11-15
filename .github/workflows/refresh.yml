@@ -1,0 +1,49 @@
+# Scheduled refresh: rebuilds filings + EOD prices after Indian market close and redeploys the app.
+# Safety: never commits; starts from the published snapshot; deploys only if tests pass and the
+# fresh snapshot validates (enough companies loaded, no filings lost, prices not older).
+# A failed run leaves the live site on its last good deploy.
+name: Refresh data
+
+on:
+  schedule:
+    - cron: "30 13 * * 1-5"   # 19:00 IST, Monday–Friday
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python -m pytest -q tests
+      - name: Start from the published snapshot
+        run: python scripts/snapshot.py restore https://animeshdubey6472.github.io/finn/ && python scripts/snapshot.py snapshot-to /tmp/prev
+      - name: Refresh filings and prices
+        env:
+          # Optional repository secret. Without it, filings are triaged by rules only.
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python -m finn push
+      - name: Validate before publishing
+        run: python scripts/snapshot.py validate /tmp/prev
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deployment
+        uses: actions/deploy-pages@v4
