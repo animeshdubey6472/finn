@@ -117,7 +117,9 @@ _RULES: list[tuple[str, re.Pattern, str, str, int, bool]] = [
     # --- capex / operations --------------------------------------------------------
     ("capex", _rx(r"\bcapex\b|capital expenditure|capacity (expansion|addition)|new (plant|facility|unit)|greenfield|brownfield|commenc\w+ of commercial production|commissioning"), "capex", "capex", 68, True),
     ("order_win", _rx(r"award of order|receipt of order|bagging|order (win|inflow|received)|letter of (award|intent|acceptance)|\bloa\b|wins? .{0,40}order|secures? .{0,40}order"), "press_release", "order_win", 58, True),
-    ("rumour", _rx(r"rumou?r|clarification (sought|on|regarding)|price movement|spurt in volume"), "press_release", "clarification", 62, True),
+    # The exchange asking the company to explain news or a price/volume spike is itself a signal.
+    ("exchange_query", _rx(r"clarification sought|seeks? clarification|sought clarification|significant (price|volume) movement|spurt in (price|volume)"), "press_release", "exchange_query", 72, True),
+    ("rumour", _rx(r"rumou?r|clarification (on|regarding)|price movement"), "press_release", "clarification", 62, True),
     ("op_update", _rx(r"(report|update|sales|production|volumes?) for the month|monthly (business|sales|production|volume)|business update|quarterly update|operational update"), "press_release", "operating_update", 56, True),
     ("press", _rx(r"press release|media release"), "press_release", "press_release", 42, True),
     # --- meetings ------------------------------------------------------------------
@@ -209,6 +211,8 @@ def blend(verdict: Verdict, materiality: int | None, category: str | None = None
         return final_category, score
     if verdict.tag == "filing" and verdict.category == "results":
         return verdict.category, max(score, 88)
+    if verdict.tag == "exchange_query":  # the exchange asking is the signal, whatever the letter says
+        return verdict.category, max(score, verdict.score)
     if not verdict.needs_read:
         return verdict.category, score
     if materiality >= 3:

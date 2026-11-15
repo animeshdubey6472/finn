@@ -250,3 +250,64 @@ def test_complete_year_older_than_quarterly_window_uses_annual_table():
     fund["series"]["annual"] = {"labels": ["Mar 2022", "Mar 2023"], "revenue": [100, 105], "op_profit": [25, 27], "pat": [10, 11], "capex": [5, 5]}
     v = ledger.score(_g(target_fy=2023, low=7, high=8, unit="pct"), ledger.Financials(fund), (2022, 9))
     assert v["status"] == "missed" and "FY23" in v["detail"] and "+5.0%" in v["detail"]
+
+
+def test_feed_keeps_history_when_a_company_fails_to_load(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from finn.push import digest
+    monkeypatch.setattr(digest, "collect", lambda companies, net: [])
+    ts = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+    old = {"id": "x1", "symbol": "TITAN", "company": "Titan", "ts": ts, "title": "Financial Results for the quarter ended 30 September 2026",
+           "source_text": None, "url": "https://example.com/a.pdf", "source": "BSE", "category": "results", "tag": "filing",
+           "score": 92, "tier": "act", "rule": "results_filing", "needs_read": True, "related": [], "read": {"status": "ok", "kind": "results"}}
+
+    class NoModel:
+        def available(self, tier):
+            return False
+
+    feed = digest.build_feed({}, llm=NoModel(), net=None, previous={"items": [old]}, portfolio=["TITAN"])
+    assert [i["id"] for i in feed["items"]] == ["x1"]
+
+
+def test_exchange_clarification_request_needs_attention():
+    v = classify("Clarification Sought From Sun Pharmaceutical Industries Ltd", "Exchange has sought clarification with reference to a news report")
+    assert v.tier == "act" and v.tag == "exchange_query"
+    assert classify("Rumour verification - Regulation 30(11)", "").tier == "know"
+
+
+def test_knowledge_bio_accepted_only_when_confident_and_specific():
+    from finn.push.enrich import accept_knowledge_bio
+    good = {"found": True, "confidence": "high", "background": "Long career at a large private bank, rising to executive director and later chief executive of its insurance arm.",
+            "previous_roles": ["Executive Director, Example Bank"], "education": "MBA"}
+    assert accept_knowledge_bio(good)["background_source"] == "model"
+    assert accept_knowledge_bio({**good, "confidence": "medium"}) == {}
+    assert accept_knowledge_bio({**good, "found": False}) == {}
+    assert accept_knowledge_bio({**good, "previous_roles": []}) == {}
+    assert accept_knowledge_bio("not json") == {}
+
+
+def _item(id_, tag, ts, title, **kw):
+    v = {"id": id_, "symbol": "SUNPHARMA", "company": "Sun Pharma", "ts": ts, "title": title, "source_text": None,
+         "url": f"https://example.com/{id_}.pdf", "source": "BSE", "category": "press_release", "tag": tag, "score": 62,
+         "tier": "know", "rule": tag, "needs_read": True, "related": [], "read": {"status": "rules"}}
+    v.update(kw)
+    return v
+
+
+def test_exchange_query_and_company_reply_become_one_event():
+    from finn.push.digest import cluster
+    query = _item("q", "exchange_query", "2026-11-02T14:23:00+05:30", "Clarification Sought From Sun Pharmaceutical Industries Ltd", score=72, tier="act")
+    reply = _item("r", "clarification", "2026-11-02T20:58:00+05:30", "Rumour verification - Regulation 30(11)", category="unclassified",
+                  score=38, tier="buried", headline="Report refers to August events, not a new development", read={"status": "ok"})
+    other = _item("o", "clarification", "2026-11-20T10:00:00+05:30", "Rumour verification - Regulation 30(11)")  # weeks later: separate
+    out = cluster([reply, query, other])
+    ids = sorted(i["id"] for i in out)
+    assert ids == ["o", "q"]
+    lead = next(i for i in out if i["id"] == "q")
+    assert [r["url"] for r in lead["related"]] == ["https://example.com/r.pdf"]
+    assert lead["why"].startswith("Company's reply: Report refers to August events")
+
+
+def test_model_cannot_demote_an_exchange_query():
+    verdict = classify("Clarification Sought From Sun Pharmaceutical Industries Ltd")
+    assert blend(verdict, 0)[1] >= 70 and blend(verdict, 1)[1] >= 70

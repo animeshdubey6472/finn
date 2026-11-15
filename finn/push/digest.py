@@ -72,13 +72,45 @@ def collect(companies: dict[str, Company], net: Fetcher) -> list[dict]:
     return list(items.values())
 
 
+QUERY_REPLY_WINDOW = timedelta(days=3)
+
+
+def pair_exchange_queries(items: list[dict]) -> list[dict]:
+    """An exchange's request for clarification and the company's reply are one event.
+
+    The query leads (it is the signal); the reply rides along as a related filing, and what the
+    company said becomes the card's "why". Without this the investor gets two alerts, in
+    different tiers, for one question and its answer.
+    """
+    queries = [i for i in items if i.get("tag") == "exchange_query"]
+    absorbed: set[int] = set()
+    for query in queries:
+        replies = [
+            r for r in items
+            if r is not query and id(r) not in absorbed and r["symbol"] == query["symbol"] and r.get("tag") == "clarification"
+            and abs(_when(r) - _when(query)) <= QUERY_REPLY_WINDOW
+        ]
+        for reply in sorted(replies, key=lambda r: r["ts"]):
+            absorbed.add(id(reply))
+            seen = {x["url"] for x in query.get("related", [])} | {query["url"]}
+            for extra in [reply, *reply.get("related", [])]:
+                if extra["url"] not in seen:
+                    query.setdefault("related", []).append({"title": extra["title"], "url": extra["url"], "ts": extra["ts"]})
+            said = reply.get("headline") or reply.get("source_text")
+            if said and not query.get("why"):
+                query["why"] = f"Company's reply: {said}"[:220]
+    return [i for i in items if id(i) not in absorbed]
+
+
 def cluster(items: list[dict]) -> list[dict]:
     """Fold filings about the same event into one item.
 
     Companies routinely file one event several times (the board outcome, the results, the
     press release). Same company + same category within a couple of hours is one event; the
-    highest-scoring filing leads and the rest ride along as `related`.
+    highest-scoring filing leads and the rest ride along as `related`. An exchange query and
+    the company's reply are paired first (see `pair_exchange_queries`).
     """
+    items = pair_exchange_queries(items)
     ordered = sorted(items, key=lambda i: (i["symbol"], i["category"], i["ts"]))
     groups: list[list[dict]] = []
     for item in ordered:
@@ -118,13 +150,17 @@ def build_feed(
     previous: dict | None = None,
     max_reads: int = 60,
     progress: Progress = lambda stage, detail: None,
+    portfolio: list[str] | None = None,
 ) -> dict:
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=config.FEED_RETENTION_DAYS)
     fresh = collect(companies, net)
 
-    # Carry over history the sources no longer list, and everything already read.
-    carried = [i for i in (previous or {}).get("items", []) if i.get("symbol") in companies and _when(i) >= cutoff]
+    # Carry over history the sources no longer list, and everything already read. Keyed on the
+    # portfolio, not on which companies loaded this run: a transient fetch failure for one
+    # company must not erase its history from the feed.
+    keep = set(portfolio or []) | set(companies)
+    carried = [i for i in (previous or {}).get("items", []) if i.get("symbol") in keep and _when(i) >= cutoff]
     for old in carried:
         if old.get("read", {}).get("status") != "ok":  # not read yet: let today's rules re-judge it
             verdict = classify(old["title"], old.get("source_text") or "")
@@ -135,7 +171,8 @@ def build_feed(
     # Read what deserves reading: highest score first, recent only, never twice.
     def readable(item: dict) -> bool:
         state = item.get("read", {})
-        return bool(item.get("needs_read")) and state.get("status") in {"rules", "failed"} and state.get("attempts", 0) < 2
+        return (item["symbol"] in companies and bool(item.get("needs_read"))
+                and state.get("status") in {"rules", "failed"} and state.get("attempts", 0) < 2)
 
     queue = sorted(
         (i for i in items if readable(i) and _when(i) >= now - timedelta(days=READ_WINDOW_DAYS)),
@@ -157,7 +194,7 @@ def build_feed(
             reads += 1
     # Results filings always carry numbers, even with no model: fall back to standardized data.
     for item in items:
-        if item["category"] == "results" and item["tag"] == "filing" and not item.get("enrichment"):
+        if item["category"] == "results" and item["tag"] == "filing" and not item.get("enrichment") and item["symbol"] in companies:
             card = _standardized_fallback(item, companies[item["symbol"]])
             if card:
                 item.update(enrichment=card, headline=results_math.headline(card))

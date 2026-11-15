@@ -90,6 +90,15 @@ Report only what the search results state; if you cannot confirm the person, say
 Reply with a single JSON object and nothing else:
 {"found": true|false, "background": "<= 55 words: prior employers, roles, experience", "previous_roles": ["Role, Organisation"], "education": "<= 14 words" | null}"""
 
+BIO_KNOWLEDGE_V = "bio-knowledge/1"
+BIO_KNOWLEDGE_SYSTEM = """A listed Indian company has appointed a senior executive, and the exchange filing carries no profile.
+From your general knowledge only, give the person's professional background IF AND ONLY IF you are confident you know this
+specific person — the same name in this role at this company, or a career that clearly leads to it. Common names, partial
+recognition or guesses must return found=false. Never invent employers, dates or degrees. This is shown to an investor
+labelled as unverified, so being wrong is worse than saying nothing.
+Reply with a single JSON object:
+{"found": true|false, "confidence": "high"|"medium"|"low", "background": "<= 45 words: prior employers and roles", "previous_roles": ["Role, Organisation"], "education": "<= 12 words" | null}"""
+
 # ---------------------------------------------------------------------------------------------
 # PULL — reading one concall transcript
 # ---------------------------------------------------------------------------------------------

@@ -121,9 +121,13 @@ def read_people(item: dict, company: Company, llm: LLM, data: bytes, texts: list
         })
     if not people:
         return None
-    # Fallback: a top-level appointee whose filing carries no profile -> one grounded web lookup.
+    # Fallbacks for a top-level appointee whose filing carries no profile: a grounded web lookup if
+    # a search-enabled model is configured, else the model's own knowledge — clearly labelled.
     for person in people:
-        if person["change"] == "appointment" and person["level"] in {"ceo", "cfo", "chair"} and not person["background"] and llm.available("search"):
+        if needs_background(person) and llm.available("smart") and not llm.available("search"):
+            person.update(background_from_knowledge(person, company, llm))
+            continue
+        if needs_background(person) and llm.available("search"):
             try:
                 found = llm.json(f"{prompts.BIO_V}", tier="search", system=prompts.BIO_SYSTEM,
                                  user=f"{person['name']}, newly appointed {person['role']} of {company.name} (India). What is their professional background?",
@@ -145,6 +149,35 @@ def read_people(item: dict, company: Company, llm: LLM, data: bytes, texts: list
         "why": str(raw["why"])[:220] if raw.get("why") else None,
         "materiality": raw.get("materiality") if raw.get("materiality") in (0, 1, 2, 3) else None,
     }
+
+
+def needs_background(person: dict) -> bool:
+    return person["change"] == "appointment" and person["level"] in {"ceo", "cfo", "chair"} and not person.get("background")
+
+
+def background_from_knowledge(person: dict, company: Company, llm: LLM) -> dict:
+    """The model's general knowledge of a top appointee, accepted only at high confidence.
+
+    Returned fields are marked `background_source="model"`; the app labels them unverified and
+    offers a one-tap search to check. Anything short of a confident, specific answer is dropped.
+    """
+    try:
+        found = llm.json(prompts.BIO_KNOWLEDGE_V, tier="smart", system=prompts.BIO_KNOWLEDGE_SYSTEM,
+                         user=f"{person['name']}, appointed {person['role']} of {company.name} (NSE: {company.symbol}).", max_tokens=700)
+    except LLMUnavailable:
+        return {}
+    return accept_knowledge_bio(found)
+
+
+def accept_knowledge_bio(found) -> dict:
+    if not isinstance(found, dict) or found.get("found") is not True or found.get("confidence") != "high":
+        return {}
+    background = str(found.get("background") or "").strip()
+    roles = [str(r)[:90] for r in (found.get("previous_roles") or []) if r][:4]
+    if len(background) < 40 or not roles:  # too thin to be useful, or no concrete employer named
+        return {}
+    return {"background": background[:360], "previous_roles": roles,
+            "education": str(found["education"])[:120] if found.get("education") else None, "background_source": "model"}
 
 
 def read_generic(item: dict, company: Company, llm: LLM, data: bytes, texts: list[str]) -> dict | None:

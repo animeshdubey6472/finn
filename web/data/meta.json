@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-15T15:59:48+00:00",
+  "generated_at": "2026-11-15T16:23:46+00:00",
   "version": "0.1.0",
   "portfolio": [
     "RELIANCE",
@@ -40,42 +40,13 @@
     "search": []
   },
   "usage_run": {
-    "calls": 1,
-    "cache_hits": 55,
-    "tokens_in": 4379,
-    "tokens_out": 1031,
-    "list_cost_usd": 0.0039,
-    "by_task": {
-      "transcript": {
-        "calls": 0,
-        "cached": 42,
-        "tokens_in": 0,
-        "tokens_out": 0,
-        "list_cost_usd": 0.0
-      },
-      "annual-report": {
-        "calls": 0,
-        "cached": 7,
-        "tokens_in": 0,
-        "tokens_out": 0,
-        "list_cost_usd": 0.0
-      },
-      "synthesis": {
-        "calls": 1,
-        "cached": 6,
-        "tokens_in": 4379,
-        "tokens_out": 1031,
-        "list_cost_usd": 0.00389
-      }
-    },
-    "by_model": {
-      "gemini-3.5-flash-lite": {
-        "calls": 1,
-        "tokens_in": 4379,
-        "tokens_out": 1031,
-        "list_cost_usd": 0.00389
-      }
-    }
+    "calls": 0,
+    "cache_hits": 0,
+    "tokens_in": 0,
+    "tokens_out": 0,
+    "list_cost_usd": 0,
+    "by_task": {},
+    "by_model": {}
   },
   "usage_total": {
     "calls": 178,
@@ -84,21 +55,36 @@
     "list_cost_usd": 0.9971
   },
   "network": {
-    "network": 0,
-    "cache": 56,
-    "bytes": 0
+    "network": 1,
+    "cache": 19,
+    "bytes": 70030
   },
   "feed_stats": {
-    "total": 80,
+    "total": 79,
     "by_tier": {
-      "act": 13,
-      "know": 16,
-      "buried": 51
+      "act": 14,
+      "know": 15,
+      "buried": 50
     },
-    "read_by_model": 24,
+    "read_by_model": 23,
     "settled_by_rules": 55,
-    "read_this_run": 5
+    "read_this_run": 0
   },
   "research_count": 7,
-  "seconds": 154.5
+  "last_run": {
+    "attempted_at": "2026-11-15T16:23:41+00:00",
+    "push": {
+      "companies_loaded": 18,
+      "companies_failed": {},
+      "prices": {
+        "attempted_at": "2026-11-15T16:23:41+00:00",
+        "ok": true,
+        "updated_at": "2026-11-15T16:23:41+00:00",
+        "as_of": "2026-11-13",
+        "missing": []
+      },
+      "feed_written": true
+    }
+  },
+  "seconds": 5.3
 }

@@ -234,6 +234,8 @@ function signals(sinceDate) {
 
 // ---------------------------------------------------------------- feed slicing
 function effectiveTier(item) {
+  // An exchange asking the company to explain itself is always worth an interruption.
+  if (item.tier === "act" && item.tag === "exchange_query") return "act";
   if (item.tier === "act" && !state.prefs.cats.includes(item.category)) return "know";
   return item.tier;
 }
@@ -308,10 +310,17 @@ function peopleBlock(enr) {
     h("div", {},
       h("div", {}, h("b", {}, p.name), " ", h("span", { class: "badge neutral" }, p.change)),
       h("div", { class: "role" }, p.role, p.effective ? ` · from ${p.effective}` : ""),
-      p.background ? h("div", { class: "bio" }, p.background) : h("div", { class: "bio muted" }, "No profile in the filing."),
+      p.background ? h("div", { class: "bio" }, p.background)
+        : ["ceo", "cfo", "chair"].includes(p.level) && p.change === "appointment"
+          ? h("div", { class: "bio muted" }, "No profile in this filing. SEBI requires one in the original appointment disclosure, which is older than the filings FINN can see. ",
+              h("a", { href: `https://www.google.com/search?q=${encodeURIComponent(`${p.name} ${p.role} profile`)}`, target: "_blank", rel: "noopener", style: "color:var(--accent)" }, "Find profile ↗"))
+          : h("div", { class: "bio muted" }, "No profile in the filing."),
       p.previous_roles?.length ? h("ul", {}, p.previous_roles.map(r => h("li", {}, r))) : null,
       p.education ? h("div", { class: "tiny muted", style: "margin-top:4px" }, p.education) : null,
-      p.background_source ? h("div", { class: "tiny muted", style: "margin-top:4px" }, p.background_source === "filing" ? "Profile from the company's filing" : "Profile from web search", p.background_links?.length ? [" · ", ...p.background_links.map((l, i) => [i ? ", " : "", h("a", { href: l.url, target: "_blank", rel: "noopener" }, l.title || "source")])] : "") : null,
+      p.background_source === "model"
+        ? h("div", { class: "tiny", style: "margin-top:6px" }, h("span", { class: "badge warn" }, "AI-generated · unverified"), " Not from any filing — the company's disclosure had no profile, so this comes from the model's general knowledge. Check before relying on it. ",
+            h("a", { href: `https://www.google.com/search?q=${encodeURIComponent(`${p.name} ${state.feed?.items?.find(i => i.enrichment === enr)?.company || ""}`)}`, target: "_blank", rel: "noopener", style: "color:var(--accent)" }, "Verify ↗"))
+        : p.background_source ? h("div", { class: "tiny muted", style: "margin-top:4px" }, p.background_source === "filing" ? "Profile from the company's filing" : "Profile from web search", p.background_links?.length ? [" · ", ...p.background_links.map((l, i) => [i ? ", " : "", h("a", { href: l.url, target: "_blank", rel: "noopener" }, l.title || "source")])] : "") : null,
       p.reason ? h("div", { class: "tiny muted" }, `Reason given: ${p.reason}`) : null)));
 }
 
@@ -418,7 +427,8 @@ function viewToday() {
   const brief = h("section", { class: "brief" }, lead,
     h("p", { class: "meta" }, `${tiers.know.length} worth knowing · ${tiers.buried.length} routine filing${tiers.buried.length === 1 ? "" : "s"} hidden · ${sigs.length} price/volume alert${sigs.length === 1 ? "" : "s"}`),
     unseenAct.length > 1 ? h("p", { style: "margin-top:8px" }, h("button", { class: "linkbtn", onclick: () => { markSeen(tiers.act.map(i => i.id)); render(); } }, "Mark all as seen")) : null,
-    snapshotAgeHours() > 3 ? h("p", { class: "tiny muted", style: "margin-top:8px" }, `Windows are measured from the snapshot (${asOf} IST). End-of-day prices as of ${feed.prices_as_of ? day(feed.prices_as_of) : "—"}.`) : null);
+    freshnessLine(feed, asOf),
+    ...dataWarnings(feed));
 
   const out = [chips, brief];
   if (!total && state.prefs.windowDays < 7) {
@@ -440,6 +450,26 @@ function viewToday() {
   return out;
 }
 
+/** Last-updated times for each source, always visible under the briefing. */
+function freshnessLine(feed, asOf) {
+  const st = feed.status || {};
+  const filings = st.filings?.updated_at ? stamp(st.filings.updated_at) : `${asOf} IST`;
+  const prices = feed.prices_as_of ? `${day(feed.prices_as_of)} close` : "—";
+  const window = snapshotAgeHours() > 3 ? " Time windows are measured from the filings update." : "";
+  return h("p", { class: "tiny muted", style: "margin-top:8px" }, `Filings updated ${filings} · Prices as of ${prices}.${window}`);
+}
+function stamp(iso) {
+  return new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" }) + " IST";
+}
+/** Explicit warnings when the last refresh could not update something; the data shown is the last good copy. */
+function dataWarnings(feed) {
+  const st = feed.status || {}, out = [];
+  const failed = Object.keys(st.filings?.companies_failed || {});
+  if (failed.length) out.push(`${failed.length} ${failed.length === 1 ? "company" : "companies"} could not be refreshed (${failed.slice(0, 4).join(", ")}${failed.length > 4 ? "…" : ""}); showing their last good data.`);
+  if (st.prices && st.prices.ok === false) out.push(`Price refresh failed${st.prices.error ? ` (${st.prices.error})` : ""}; showing prices as of ${feed.prices_as_of ? day(feed.prices_as_of) : "the last good update"}.`);
+  return out.map(text => h("p", { class: "small", role: "status", style: "margin-top:8px;color:var(--bad-ink)" }, "⚠ ", text));
+}
+
 function viewPortfolio() {
   brandTop(state.feed?.prices_as_of ? `End of day ${day(state.feed.prices_as_of)}` : "");
   const rows = (state.feed?.portfolio || []).slice();
@@ -456,7 +486,9 @@ function viewPortfolio() {
     h("div", { class: "rows" }, rows.map(r => {
       const p = r.price || {}, f = latestFiling(r.symbol);
       return h("a", { class: "hold", href: `#/c/${encodeURIComponent(r.symbol)}` },
-        h("div", { style: "min-width:0" }, h("b", {}, r.symbol), h("div", { class: "n" }, f ? `${CATEGORY_LABEL[f.category]} · ${ago(f.ts)}` : r.industry || r.name)),
+        h("div", { style: "min-width:0" }, h("b", {}, r.symbol),
+          r.stale ? h("div", { class: "n", style: "color:var(--bad-ink)", title: r.stale_reason || "" }, `⚠ Not refreshed since ${r.refreshed_at ? day(r.refreshed_at) : "the last run"}`)
+                  : h("div", { class: "n" }, f ? `${CATEGORY_LABEL[f.category]} · ${ago(f.ts)}` : r.industry || r.name)),
         sparkline(state.prices?.symbols?.[r.symbol]?.c.slice(-60) || [], { w: 72, h: 28, color: (p.move_1m_pct ?? 0) >= 0 ? "var(--good)" : "var(--bad)" }),
         h("div", { class: "p" }, h("div", { class: "tabular" }, p.close ? INR.format(p.close) : "—"), h("div", { class: `d ${dirClass(p.move_pct)}` }, sp(p.move_pct, 1))));
     })),

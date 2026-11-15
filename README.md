@@ -131,6 +131,10 @@ logged with tokens and list-price cost (`web/data/meta.json`, and the Alerts tab
   anywhere and fast on a phone. Live research for an arbitrary ticker needs the small server.
 - **Feed as memory.** Sources only list recent filings; the published feed is re-loaded each
   run, so history accumulates and nothing is read twice.
+- **A failed refresh never replaces good data.** If prices fail, the last good prices stay; if a
+  company fails to load, its history and last good row stay (marked stale); if nothing loads, the
+  published feed is left untouched; research is only replaced by research at least as complete.
+  Each refresh records per-source status, which the app shows as last-updated times and ⚠ warnings.
 
 ## Deliberately left out
 
@@ -180,10 +184,16 @@ the script to get your own numbers.
 - **Insurers** are analysed with the same lens as industrial companies; operating margin and cash
   conversion are not meaningful for them.
 - **Snapshot, not live, on the deployed site.** Windows ("last 24h") are measured from the
-  snapshot time shown in the header. `python -m finn refresh` updates it; live research on a new
-  ticker needs `python -m finn serve`.
-- **Web lookup of appointee backgrounds is off by default** (search grounding is not in the
-  Gemini free tier); profiles come from the filing, which SEBI requires to include one.
+  filings update shown under the briefing. `python -m finn refresh` updates it; live research on a
+  new ticker needs `python -m finn serve`. A scheduled refresh was deliberately not added: an
+  unattended run that a source blocks from cloud IPs could degrade the demo during review.
+- **Appointee backgrounds come from the filing.** SEBI requires a profile in the *appointment*
+  disclosure, but a later filing (a shareholder vote, say) may not repeat it, and FINN sees only
+  each company's most recent filings. For a CEO, CFO or Chair with no profile, FINN asks the model
+  what it knows, accepts only a high-confidence, specific answer, and labels it *AI-generated ·
+  unverified* with a verify link. For HDFC Bank's new CEO the model declined, so the card says why there is no profile
+  and offers a one-tap search instead of guessing. Web-grounded lookup needs a paid Gemini key
+  (`FINN_MODELS_SEARCH`).
 
 ## Where I'd take it next
 
@@ -214,7 +224,7 @@ finn/
   prompts.py every prompt, versioned (the version is part of the cache key)
   pipeline.py, server.py, __main__.py
 web/         index.html, app.css, app.js, data/
-tests/       offline tests for the deterministic core
+tests/       62 offline tests: core logic, parsers (synthetic page), failure scenarios
 ```
 
 ## Research and references
