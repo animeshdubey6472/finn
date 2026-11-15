@@ -75,6 +75,13 @@ class Call:
         return (self.tokens_in * price_in + self.tokens_out * price_out) / 1_000_000
 
 
+def _unwrap(data):
+    """Models sometimes wrap the requested object in a one-item list: [{...}] -> {...}."""
+    if isinstance(data, list) and len(data) == 1 and isinstance(data[0], dict):
+        return data[0]
+    return data
+
+
 def extract_json(text: str):
     """Parse model output as JSON, tolerating code fences and stray prose around it."""
     text = (text or "").strip()
@@ -151,7 +158,7 @@ class LLM:
         if use_cache and path.exists():
             record = json.loads(path.read_text(encoding="utf-8"))
             self.calls.append(Call(task, tier, record.get("model", "?"), True))
-            return record["data"]
+            return _unwrap(record["data"])
 
         errors: list[str] = []
         for spec in self.routes.get(tier, []):
@@ -165,7 +172,7 @@ class LLM:
                     started = time.time()
                     self._pace(model)
                     text, t_in, t_out, extra = self._dispatch(provider, model, system, user, attachments, max_tokens, search)
-                    data = extract_json(text)
+                    data = _unwrap(extract_json(text))
                     if extra and isinstance(data, dict):
                         data.setdefault("_sources", extra)
                     self.calls.append(Call(task, tier, model, False, t_in, t_out, time.time() - started))

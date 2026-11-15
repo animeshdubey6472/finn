@@ -137,6 +137,16 @@ def score(item: dict, fin: Financials, call_period_end: Period) -> dict:
     fy, quarter = item.get("target_fy"), item.get("target_quarter")
     numeric = low is not None and (item.get("unit") in {"pct", "bps"} or (item.get("unit") == "inr_cr" and metric == "capex"))
 
+    # Only whole-company promises can be held against whole-company numbers.
+    if item.get("scope") == "segment":
+        name = item.get("segment") or "one segment"
+        return _verdict("unmeasured", f"Guidance for {name}, not the whole company; segment results are not in the headline financials.")
+    # A margin promise must be on the profit line we can measure (operating ≈ EBITDA, or PAT).
+    basis = item.get("margin_basis")
+    if metric == "operating_margin" and basis and basis != "ebitda":
+        return _verdict("unmeasured", f"Guided on {basis.upper()} margin; the headline financials report operating (EBITDA) margin, so they are not comparable.")
+    if metric == "pat_margin" and basis and basis not in {"pat"}:
+        return _verdict("unmeasured", f"Guided on {basis.upper()} margin, which is not PAT margin.")
     if fin.is_lender and metric in {"operating_margin"}:
         return _verdict("unmeasured", "Operating margin is not reported for lenders in the standardized financials.")
     if metric not in {"revenue_growth", "operating_margin", "pat_growth", "pat_margin", "capex"}:

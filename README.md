@@ -13,8 +13,9 @@ build challenge. It does two jobs:
   company later reported**. Then it sets management's narrative against the numbers.
 
 > The point of view: an investor doesn't need more information, they need *less, better
-> sorted, and checkable*. So FINN is an inbox you can clear, not a feed you scroll — and every
-> claim it makes links back to the page it came from.
+> sorted, and checkable*. So FINN is an inbox you can clear, not a feed you scroll — and its
+> claims are traceable: every quote links to the transcript page it came from, every card to
+> the filing, and every computed figure to the facts it was built from.
 
 ---
 
@@ -24,7 +25,7 @@ build challenge. It does two jobs:
 |---|---|
 | **App** | **https://animeshdubey6472.github.io/finn/** — open on a phone |
 | **Run locally** | `python -m venv .venv && .venv/bin/pip install -r requirements.txt` → `cp .env.example .env` and add a free Gemini key → `.venv/bin/python -m finn serve` → http://127.0.0.1:8000 |
-| **Research any ticker** | `python -m finn research TATAMOTORS` (or type it into the app's search when the local server runs) |
+| **Research any ticker** | `python -m finn research COALINDIA` (or type it into the app's search when the local server runs) |
 | **Refresh everything** | `python -m finn refresh` |
 | **Alerts in the terminal** | `python -m finn alerts --move 3 --volume 2.5` |
 
@@ -50,7 +51,7 @@ fundamentals, and results cards from standardized data.
    link to the transcript page. Verdicts are computed in code from reported financials.
 2. **Narrative vs numbers** — "management says" beside "numbers show", tagged aligned /
    stretched / diverging.
-3. **Bull vs bear**, three points each, every figure tied to a computed fact.
+3. **Bull vs bear**, three points each; each point cites the computed facts it relies on.
 4. **Fundamentals** — snapshot, trend, balance sheet, cash quality (lenders get bank-appropriate
    measures instead of operating margin and cash conversion).
 5. **From the annual report** — auditor's opinion, contingent liabilities, related parties.
@@ -140,6 +141,25 @@ logged with tokens and list-price cost (`web/data/meta.json`, and the Alerts tab
   [SEBI circular SEBI/HO/CFD/CFD-PoD-1/P/CIR/2023/123, 13 July 2023](https://www.sebi.gov.in/legal/circulars/jul-2023/disclosure-of-material-events-information-by-listed-entities-under-regulations-30-and-30a-of-securities-and-exchange-board-of-india-listing-obligations-and-disclosure-requirements-regulations-201-_73910.html)),
   so FINN reads the profile from the filing. A web lookup exists for filings without one, but is off by default: search grounding needs a paid Gemini key (set `FINN_MODELS_SEARCH`).
 
+## Known limitations (measured, not guessed)
+
+- **The ledger scores only what headline financials can check.** Across the seven demo
+  companies, a minority of extracted commitments get a verdict; the rest (order books, capacity,
+  segment targets, store counts, "outgrow the market") are shown as watch items. Large
+  conglomerates and banks guide mostly on such items, so their scorecards are sparse.
+- **Revenue definitions differ.** Some companies (ITC, for one) print revenue *including* excise
+  duty in the filing, while standardized data reports it net. FINN's reconciliation flags the
+  gap on the card ("differs from standardized data") rather than silently choosing one.
+- **Segment mix is thin.** Annual-report extraction finds segment names but rarely their revenue
+  share, so the business snapshot leans on management's own description.
+- **Insurers** are analysed with the same lens as industrial companies; operating margin and cash
+  conversion are not meaningful for them.
+- **Snapshot, not live, on the deployed site.** Windows ("last 24h") are measured from the
+  snapshot time shown in the header. `python -m finn refresh` updates it; live research on a new
+  ticker needs `python -m finn serve`.
+- **Web lookup of appointee backgrounds is off by default** (search grounding is not in the
+  Gemini free tier); profiles come from the filing, which SEBI requires to include one.
+
 ## Where I'd take it next
 
 1. Scheduled refresh (GitHub Actions cron) and web-push for "needs you" items.
@@ -149,6 +169,12 @@ logged with tokens and list-price cost (`web/data/meta.json`, and the Alerts tab
 4. Peer view: the same promise ledger across a sector ("who guides conservatively?").
 
 ---
+
+## How it was built
+
+Built in one session with Claude Code as the coding agent. The readable summary — how work was
+split, the decisions I made, and the mistakes review caught — is in
+[`docs/BUILD_HISTORY.md`](docs/BUILD_HISTORY.md); the full transcript is next to it.
 
 ## Repository
 
@@ -184,5 +210,5 @@ What I looked at before building, and what I took from each:
 
 ## Not investment advice
 
-FINN is a prototype for a hiring exercise. It may be wrong; every figure links to its source so
+FINN is a prototype for a hiring exercise. It may be wrong; sources are linked throughout so
 you can check.

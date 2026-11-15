@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-15T14:18:43+00:00",
+  "generated_at": "2026-11-15T15:21:13+00:00",
   "version": "0.1.0",
   "portfolio": [
     "RELIANCE",
@@ -30,78 +30,81 @@
   "routes": {
     "fast": [
       "gemini:gemini-3.1-flash-lite",
-      "gemini:gemini-3.5-flash-lite",
-      "gemini:gemini-2.5-flash-lite"
+      "gemini:gemini-3.5-flash-lite"
     ],
     "smart": [
       "gemini:gemini-3.6-flash",
       "gemini:gemini-3.8-flash",
       "gemini:gemini-3.5-flash-lite"
     ],
-    "search": [
-      "gemini:gemini-2.5-flash-lite"
-    ]
+    "search": []
   },
   "usage_run": {
-    "calls": 21,
-    "cache_hits": 0,
-    "tokens_in": 42552,
-    "tokens_out": 4256,
-    "list_cost_usd": 0.017,
+    "calls": 5,
+    "cache_hits": 35,
+    "tokens_in": 18949,
+    "tokens_out": 8262,
+    "list_cost_usd": 0.0335,
     "by_task": {
-      "results": {
-        "calls": 1,
-        "cached": 0,
-        "tokens_in": 7318,
-        "tokens_out": 607,
-        "list_cost_usd": 0.00274
+      "transcript": {
+        "calls": 0,
+        "cached": 30,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "list_cost_usd": 0.0
       },
-      "read-filing": {
-        "calls": 16,
-        "cached": 0,
-        "tokens_in": 28039,
-        "tokens_out": 2848,
-        "list_cost_usd": 0.01128
+      "annual-report": {
+        "calls": 0,
+        "cached": 5,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "list_cost_usd": 0.0
       },
-      "people": {
-        "calls": 4,
+      "synthesis": {
+        "calls": 5,
         "cached": 0,
-        "tokens_in": 7195,
-        "tokens_out": 801,
-        "list_cost_usd": 0.00299
+        "tokens_in": 18949,
+        "tokens_out": 8262,
+        "list_cost_usd": 0.03347
       }
     },
     "by_model": {
-      "gemini-3.1-flash-lite": {
-        "calls": 21,
-        "tokens_in": 42552,
-        "tokens_out": 4256,
-        "list_cost_usd": 0.01701
+      "gemini-3.5-flash-lite": {
+        "calls": 4,
+        "tokens_in": 15445,
+        "tokens_out": 3824,
+        "list_cost_usd": 0.0142
+      },
+      "gemini-3.6-flash": {
+        "calls": 1,
+        "tokens_in": 3504,
+        "tokens_out": 4438,
+        "list_cost_usd": 0.01927
       }
     }
   },
   "usage_total": {
-    "calls": 24,
-    "tokens_in": 63249,
-    "tokens_out": 12400,
-    "list_cost_usd": 0.0543
+    "calls": 126,
+    "tokens_in": 1344459,
+    "tokens_out": 151408,
+    "list_cost_usd": 0.7191
   },
   "network": {
-    "network": 36,
-    "cache": 3,
-    "bytes": 25777100
+    "network": 0,
+    "cache": 40,
+    "bytes": 0
   },
   "feed_stats": {
     "total": 80,
     "by_tier": {
       "act": 13,
-      "know": 17,
-      "buried": 50
+      "know": 16,
+      "buried": 51
     },
-    "read_by_model": 20,
+    "read_by_model": 24,
     "settled_by_rules": 55,
-    "read_this_run": 26
+    "read_this_run": 5
   },
-  "research_count": 1,
-  "seconds": 624.8
+  "research_count": 7,
+  "seconds": 227.9
 }

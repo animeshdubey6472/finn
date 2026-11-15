@@ -72,6 +72,9 @@ def _clean_guidance(item: dict, pages: list[str]) -> dict | None:
         "comparison": item.get("comparison") if item.get("comparison") in {"yoy", "level", "qoq", "absolute"} else None,
         "direction": item.get("direction") if item.get("direction") in {"up", "down", "flat"} else None,
         "firmness": item.get("firmness") if item.get("firmness") in {"numeric", "directional", "aspiration"} else "directional",
+        "scope": "segment" if item.get("scope") == "segment" else "company",
+        "segment": str(item["segment"])[:60] if item.get("segment") else None,
+        "margin_basis": item.get("margin_basis") if item.get("margin_basis") in {"ebitda", "ebit", "pbt", "pat", "gross", "other"} else None,
     }
 
 
@@ -117,7 +120,7 @@ def read_transcript(call: dict, company: Company, llm: LLM, net: Fetcher) -> dic
         body = "TRANSCRIPT\n" + pdf.with_page_marks(pages, budget_chars=MAX_CHARS)
     raw = llm.json(
         f"{prompts.TRANSCRIPT_V}", tier="fast", system=prompts.TRANSCRIPT_SYSTEM, user=header + body,
-        attachments=attachments, max_tokens=6000,
+        attachments=attachments, max_tokens=8000,
     )
     if not isinstance(raw, dict):
         return None

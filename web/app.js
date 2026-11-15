@@ -56,8 +56,18 @@ function dirClass(v, goodWhenUp = true) {
   if (v == null || Math.abs(v) < 0.05) return "";
   return (v > 0) === goodWhenUp ? "up" : "down";
 }
+/** The app's "now". A static deployment shows a snapshot, so windows and "x ago" are measured from
+ *  the moment the snapshot was taken — otherwise "last 24h" goes empty the day after publishing. */
+function refNow() {
+  const snap = state.feed?.generated_at ? Date.parse(state.feed.generated_at) : NaN;
+  return isNaN(snap) ? Date.now() : Math.min(Date.now(), snap);
+}
+function snapshotAgeHours() {
+  const snap = state.feed?.generated_at ? Date.parse(state.feed.generated_at) : NaN;
+  return isNaN(snap) ? 0 : (Date.now() - snap) / 3600000;
+}
 function ago(iso) {
-  const d = new Date(iso), mins = (Date.now() - d) / 60000;
+  const d = new Date(iso), mins = (refNow() - d) / 60000;
   if (mins < 60) return `${Math.max(1, Math.round(mins))}m ago`;
   if (mins < 60 * 24) return `${Math.round(mins / 60)}h ago`;
   if (mins < 60 * 24 * 7) return `${Math.round(mins / 1440)}d ago`;
@@ -228,7 +238,7 @@ function effectiveTier(item) {
   return item.tier;
 }
 function windowSlice() {
-  const items = state.feed?.items || [], since = Date.now() - state.prefs.windowDays * 86400000;
+  const items = state.feed?.items || [], since = refNow() - state.prefs.windowDays * 86400000;
   const inWin = items.filter(i => new Date(i.ts).getTime() >= since);
   const tiers = { act: [], know: [], buried: [] };
   inWin.forEach(i => tiers[effectiveTier(i)].push(i));
@@ -366,7 +376,8 @@ function brandTop(sub) { setTop(h("div", { class: "brand" }, "FINN", h("span", {
 
 function viewToday() {
   const feed = state.feed;
-  brandTop(feed ? `Filings ${ago(feed.generated_at)} · prices ${state.feed.prices_as_of ? day(state.feed.prices_as_of) : "—"}` : "");
+  const asOf = feed ? new Date(feed.generated_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" }) : "";
+  brandTop(feed ? (snapshotAgeHours() > 3 ? `Snapshot as of ${asOf} IST` : `Updated ${Math.max(1, Math.round(snapshotAgeHours() * 60))}m ago · prices ${feed.prices_as_of ? day(feed.prices_as_of) : "—"}`) : "");
   if (!feed) return [h("div", { class: "empty" }, "No feed yet. Run python -m finn push.")];
   const { tiers, total } = windowSlice();
   const sigs = signals(sinceSessionDate());
@@ -380,11 +391,12 @@ function viewToday() {
     : tiers.act.length ? h("p", { class: "lead" }, "You're caught up. ", h("span", { class: "muted" }, "Nothing new needs action.")) : h("p", { class: "lead" }, "Quiet window. ", h("span", { class: "muted" }, "No material filings."));
   const brief = h("section", { class: "brief" }, lead,
     h("p", { class: "meta" }, `${tiers.know.length} worth knowing · ${tiers.buried.length} routine filing${tiers.buried.length === 1 ? "" : "s"} hidden · ${sigs.length} price/volume alert${sigs.length === 1 ? "" : "s"}`),
-    unseenAct.length > 1 ? h("p", { style: "margin-top:8px" }, h("button", { class: "linkbtn", onclick: () => { markSeen(tiers.act.map(i => i.id)); render(); } }, "Mark all as seen")) : null);
+    unseenAct.length > 1 ? h("p", { style: "margin-top:8px" }, h("button", { class: "linkbtn", onclick: () => { markSeen(tiers.act.map(i => i.id)); render(); } }, "Mark all as seen")) : null,
+    snapshotAgeHours() > 3 ? h("p", { class: "tiny muted", style: "margin-top:8px" }, `Windows are measured from the snapshot (${asOf} IST). End-of-day prices as of ${feed.prices_as_of ? day(feed.prices_as_of) : "—"}.`) : null);
 
   const out = [chips, brief];
   if (!total && state.prefs.windowDays < 7) {
-    const wider = (feed.items || []).filter(i => new Date(i.ts) >= Date.now() - 7 * 86400000 && effectiveTier(i) === "act").length;
+    const wider = (feed.items || []).filter(i => new Date(i.ts) >= refNow() - 7 * 86400000 && effectiveTier(i) === "act").length;
     if (wider) out.push(h("p", { class: "small muted", style: "margin-top:10px" }, `${wider} material filing${wider === 1 ? "" : "s"} in the last 7 days. `, h("button", { class: "linkbtn", onclick: () => { state.prefs.windowDays = 7; savePrefs(); render(); } }, "Widen to 7 days")));
   }
   if (tiers.act.length) out.push(h("h2", {}, "Needs you ", h("span", { class: "count" }, tiers.act.length)), ...tiers.act.map(itemCard));
@@ -726,7 +738,11 @@ async function boot() {
   const [feed, prices, meta, index] = await Promise.allSettled([getJSON("data/feed.json"), getJSON("data/prices.json"), getJSON("data/meta.json"), getJSON("data/research/index.json")]);
   state.feed = feed.value || null; state.prices = prices.value || null; state.meta = meta.value || null; state.index = index.value || [];
   render();
-  try { const res = await fetch("api/health", { cache: "no-store" }); state.api = res.ok && (await res.json()).fast; } catch { state.api = false; }
+  // The live-research API exists only when the app is served by `python -m finn serve`.
+  const static_host = /\.github\.io$|\.pages\.dev$|\.netlify\.app$|\.vercel\.app$/.test(location.hostname);
+  if (!static_host) {
+    try { const res = await fetch("api/health", { cache: "no-store" }); state.api = res.ok && (await res.json()).fast; } catch { state.api = false; }
+  }
   if (state.api && (location.hash.startsWith("#/research") || location.hash.startsWith("#/c/"))) render();
 }
 boot();

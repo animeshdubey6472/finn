@@ -180,3 +180,20 @@ def test_rupee_revenue_target_compares_levels_not_growth():
 def test_directional_growth_is_not_scored():
     fin = ledger.Financials(_fund([100] * 6, [15] * 6, [10] * 6, ["Jun 2025"] + QL))
     assert ledger.score(_g(direction="up"), fin, (2026, 3))["status"] == "unmeasured"
+
+
+def test_segment_guidance_is_not_scored_against_company():
+    fin = ledger.Financials(_fund([100] * 6, [15] * 6, [10] * 6, ["Jun 2025"] + QL))
+    verdict = ledger.score(_g(low=13, high=14, scope="segment", segment="Eyewear"), fin, (2026, 3))
+    assert verdict["status"] == "unmeasured" and "Eyewear" in verdict["detail"]
+
+
+def test_ebit_margin_not_compared_with_ebitda():
+    fin = ledger.Financials(_fund([100] * 6, [15] * 6, [10] * 6, ["Jun 2025"] + QL))
+    assert ledger.score(_g(metric="operating_margin", low=11, high=11.5, margin_basis="ebit"), fin, (2026, 3))["status"] == "unmeasured"
+
+
+def test_model_output_wrapped_in_list_is_unwrapped():
+    from finn.llm import _unwrap, extract_json
+    assert _unwrap(extract_json('[{"guidance": []}]')) == {"guidance": []}
+    assert _unwrap([{"a": 1}, {"b": 2}]) == [{"a": 1}, {"b": 2}]

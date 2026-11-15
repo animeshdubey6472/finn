@@ -93,7 +93,7 @@ Reply with a single JSON object and nothing else:
 # PULL — reading one concall transcript
 # ---------------------------------------------------------------------------------------------
 
-TRANSCRIPT_V = "transcript/5"
+TRANSCRIPT_V = "transcript/6"
 TRANSCRIPT_SYSTEM = f"""You read one earnings-call transcript of an Indian listed company and pull out what management COMMITTED to and what it CLAIMED, so that both can later be checked against reported numbers.
 {GROUNDING}
 Page markers look like [p.7]. Every item needs the page it came from and a verbatim quote.
@@ -102,6 +102,7 @@ Definitions:
 - GUIDANCE = a forward-looking statement by management about a headline number: growth, margins, profit, capex, volumes, store/capacity additions, debt. Skip vague optimism with no measurable content.
 - CLAIM = management's description of what is happening now or why results came out as they did.
 - Quotes must be copied word-for-word from the transcript (<= 35 words). If you cannot quote it, leave the item out.
+- Scope matters: "the eyewear division will grow 13%" or "jewellery EBIT margin of 11%" is segment guidance, not company guidance. Mark it "segment" and name the segment.
 
 Return JSON:
 {{
@@ -122,7 +123,10 @@ Return JSON:
       "unit": "pct" | "bps" | "inr_cr" | "x" | "count" | null,
       "comparison": "yoy" | "level" | "qoq" | "absolute" | null,   // 'level' for a margin level; 'yoy' for growth over last year
       "direction": "up" | "down" | "flat" | null,                  // for directional guidance without a number
-      "firmness": "numeric" | "directional" | "aspiration"
+      "firmness": "numeric" | "directional" | "aspiration",
+      "scope": "company" | "segment",   // 'segment' if it is about one division, business, product line, geography or subsidiary — not the whole company
+      "segment": "name of that segment" | null,
+      "margin_basis": "ebitda" | "ebit" | "pbt" | "pat" | "gross" | "other" | null   // for margins: which profit line, exactly as management stated it
     }}
   ],
   "claims": [                         // up to 6
