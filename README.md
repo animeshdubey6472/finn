@@ -8,7 +8,8 @@ build challenge. It does two jobs:
   verified Revenue · EBITDA · PBT · PAT card (QoQ and YoY); management changes come with the
   appointee's background; unusual price or volume moves fire at thresholds you set.
 - **Pull — "is management doing what it said?"** For any NSE company, FINN reads the last six
-  earnings-call transcripts and the latest annual report, extracts every concrete commitment
+  earnings-call transcripts and the latest annual report (27 companies precomputed; any other
+  symbol can be researched live from the app), extracts every concrete commitment
   with a verbatim quote and page number, and **scores each promise against the numbers the
   company later reported**. Then it sets management's narrative against the numbers.
 
@@ -25,8 +26,9 @@ build challenge. It does two jobs:
 |---|---|
 | **App** | **https://animeshdubey6472.github.io/finn/** — open on a phone |
 | **Run locally** | `python -m venv .venv && .venv/bin/pip install -r requirements.txt` → `cp .env.example .env` and add a free Gemini key → `.venv/bin/python -m finn serve` → http://127.0.0.1:8000 |
-| **Research any ticker** | In the app: **Research → type any NSE symbol**. Live research runs on a small free server ([finn-api](https://finn-api-35ep.onrender.com/api/health)); locally: `python -m finn research COALINDIA` |
-| **Refresh everything** | `python -m finn refresh` |
+| **Research any ticker** | In the app: **Research → type any NSE symbol**. Live research runs on a small free server ([health check](https://finn-api-35ep.onrender.com/api/health); it sleeps when idle, so the first request can take about a minute more). Locally: `python -m finn research COALINDIA` |
+| **Refresh everything** | `python -m finn refresh` (the deployed site refreshes itself every weekday at 19:00 IST) |
+| **Re-apply ledger rules offline** | `python -m finn rescore` (no model calls) |
 | **Alerts in the terminal** | `python -m finn alerts --move 3 --volume 2.5` |
 
 Without an API key everything deterministic still works: prices, alerts, triage by rules,
@@ -69,14 +71,16 @@ Three things to try on the [live app](https://animeshdubey6472.github.io/finn/) 
 2. **Narrative vs numbers** — "management says" beside "numbers show", tagged aligned /
    stretched / diverging.
 3. **Bull vs bear**, three points each; each point cites the computed facts it relies on.
-4. **Fundamentals** — snapshot, trend, balance sheet, cash quality (lenders get bank-appropriate
-   measures instead of operating margin and cash conversion).
+4. **Fundamentals** — snapshot, trend, balance sheet, cash quality (lenders and insurers get
+   sector-appropriate measures instead of operating margin and cash conversion).
 5. **From the annual report** — auditor's opinion, contingent liabilities, related parties.
 6. **Sources & checks** — how many quotes were found verbatim, how many synthesized statements
    passed the figure check, which documents were read.
 
 **Alerts** — threshold sliders with a live preview ("at these settings: 6 alerts in the last
-month"), the filing types allowed to interrupt you, and what the run cost.
+month"), the filing types allowed to interrupt you, and what the run cost. Opt-in notifications
+tell you about new *needs you* items and threshold breaches **when you open or reopen the app**
+(on iPhone, after adding it to the Home Screen); this is not background push.
 
 ---
 
@@ -102,8 +106,8 @@ month"), the filing types allowed to interrupt you, and what the run cost.
                │                                      └────────────────┬─────────────────┘
                └──────────────► web/data/*.json ◄──────────────────────┘
                                       │
-                         static mobile web app (no build step)
-                         + optional local server for live research
+                         static mobile web app (no build step, GitHub Pages)
+                         + live-research API (finn/server.py, Render free tier)
 ```
 
 **The rule throughout: models read, code decides.** A model transcribes numbers from a
@@ -117,8 +121,8 @@ isn't in the fact pack it was given.
 | Tier | Default model | Used for | Calls per company |
 |---|---|---|---|
 | — | none (rules) | triaging filings — most of the feed | 0 |
-| fast | `gemini-3.1-flash-lite` | reading a filing, a transcript, an annual report | ~1 per document |
-| smart | `gemini-3.6-flash` | the one synthesis per company | 1 |
+| fast | `gemini-3.1-flash-lite` → `gemini-3.5-flash-lite` | reading a filing, a transcript, an annual report | ~1 per document |
+| smart | `gemini-3.6-flash` → `gemini-3.8-flash` → `gemini-3.5-flash-lite` | the one synthesis per company | 1 |
 | search | off by default | appointee background from the web, only if the filing has none — opt-in, because Google search grounding is not in the free tier | 0 |
 
 Each tier is an ordered fallback list; a free-tier cap or a hung model falls through to the
@@ -129,7 +133,7 @@ logged with tokens and list-price cost (`web/data/meta.json`, and the Alerts tab
 
 ## Key decisions and trade-offs
 
-- **Rules before models for triage.** Exchange subject lines are formulaic; ~50 ordered rules
+- **Rules before models for triage.** Exchange subject lines are formulaic; 48 ordered rules
   sort most filings for free and flag only the ambiguous middle for a model. Cost: rules need
   maintenance and will mis-sort novel phrasing — mitigated by a "no rule matched → read it"
   default and by letting the model move items across tiers (with guard rails: a results filing
@@ -144,8 +148,10 @@ logged with tokens and list-price cost (`web/data/meta.json`, and the Alerts tab
   financials come from screener's standardized tables (consistent across companies, cheap);
   guidance and claims come only from transcripts and annual reports. No news, broker notes or
   model knowledge is used on the pull side.
-- **Static app + JSON snapshot.** The app is three files with no build step, deployable
-  anywhere and fast on a phone. Live research for an arbitrary ticker needs the small server.
+- **Static app + JSON snapshot, plus an optional API.** The app is three files with no build
+  step, fast on a phone and served by GitHub Pages. Live research for an arbitrary ticker goes to
+  a small API (`finn/server.py`) whose address is set in `web/data/config.json`; with no address
+  set, the app is purely the precomputed snapshot.
 - **Feed as memory.** Sources only list recent filings; the published feed is re-loaded each
   run, so history accumulates and nothing is read twice.
 - **A failed refresh never replaces good data.** If prices fail, the last good prices stay; if a
@@ -155,7 +161,8 @@ logged with tokens and list-price cost (`web/data/meta.json`, and the Alerts tab
 
 ## Deliberately left out
 
-- Intraday data and real-time push notifications (the brief is end-of-day; in-app alerts suffice).
+- Intraday data and background push notifications (the brief is end-of-day; notifications fire
+  when the app is opened or reopened).
 - Chat as the main interface. Q&A exists in the engine but the product bet is that a ranked,
   clearable inbox plus a promise ledger beats a blank chat box for a daily workflow.
 - Buy/sell calls, price targets, valuation models.
@@ -186,12 +193,15 @@ re-run the script.
 
 ## Known limitations (measured, not guessed)
 
-- **The ledger scores only what headline financials can check.** Across the 22 researched
-  companies, 25 of 323 extracted commitments (8%) get a verdict; the rest (order books, capacity,
+- **The ledger scores only what headline financials can check.** Across the 27 researched
+  companies, 24 of 392 extracted commitments (6%) get a verdict; the rest (order books, capacity,
   segment targets, store counts, "outgrow the market") are shown as watch items with their next
   checkpoint. Many companies (Reliance, TCS, Titan, IndiGo, all the lenders) guide almost entirely on
   such items, so their ledgers show watch lists rather than verdicts. For lenders, loan-book (AUM)
-  guidance is never scored against income. Widening the checkable metrics (debt, rupee
+  guidance is never scored against income; industry forecasts ("deposit growth of scheduled
+  commercial banks…") and undated aspirations ("eventually…") are never scored; average-growth
+  promises are scored as a compound rate over completed years; capex only when the promise is
+  clearly company-wide. Widening the checkable metrics (debt, rupee
   EBITDA/PAT, bank deposits) made verdicts more correct but did not raise coverage for this set.
 - **EBITDA definitions differ.** Some companies count other income inside EBITDA. When a margin
   promise is met only under one definition, FINN shows both numbers instead of a verdict.
@@ -200,22 +210,27 @@ re-run the script.
   gap on the card ("differs from standardized data") rather than silently choosing one.
 - **Segment mix is thin.** Annual-report extraction finds segment names but rarely their revenue
   share, so the business snapshot leans on management's own description.
-- **Insurers** are analysed with the same lens as industrial companies; operating margin and cash
-  conversion are not meaningful for them.
-- **Narrative analysis is pending for 15 companies.** All 22 have fundamentals, transcripts and the
-  promise ledger; the narrative-vs-numbers and bull/bear sections exist for 7 so far, because the
-  stronger model's free daily quota ran out. They are generated with
+- **Insurers get only a first-pass treatment.** Operating margin, debt/EBITDA and cash conversion
+  are suppressed for them (HDFCLIFE), but insurer-specific measures — solvency, embedded value,
+  persistency — are not in the headline financials, so FINN does not show them.
+- **Narrative analysis is pending for 20 of the 27 precomputed companies.** All 27 have
+  fundamentals, transcripts and the promise ledger; the narrative-vs-numbers and bull/bear sections
+  exist for 7 so far, because the stronger model's free daily quota ran out. (Companies researched
+  live get theirs at the time.) They are generated with
   `python -m finn research <SYMBOLS>` once it resets; each page says which model wrote its analysis.
-- **Daily, not real-time.** A scheduled GitHub Action refreshes filings and end-of-day prices every
-  weekday at 19:00 IST. It never commits; it starts from the published snapshot and deploys only if
-  validation passes (most companies loaded, no published filings lost, prices not older), so a run
-  blocked by a source leaves the last good site in place. Without a `GEMINI_API_KEY` repository
-  secret, new filings are triaged by rules only; research is refreshed manually
+- **Daily, not real-time.** `.github/workflows/refresh.yml` runs every weekday at 19:00 IST
+  (13:30 UTC): it runs the tests, restores the published snapshot so history carries forward,
+  refreshes filings and end-of-day prices, and validates the result with `scripts/snapshot.py`
+  (at least 75% of companies loaded, no more than 10% of published filings lost, prices not older)
+  before deploying. It never commits; a run that fails any step leaves the last good site in place.
+  A `GEMINI_API_KEY` repository secret is set, so new filings are read by the model (the last run
+  read one); without it they would be triaged by rules only. Research is refreshed manually
   (`python -m finn research …`).
 - **Live research runs on a free host, in a lighter mode.** The app on GitHub Pages calls a small
   API on Render's free tier (CORS limited to the Pages site; one run at a time; 3 runs per visitor
-  per hour and 20 per day; fresh results cached for 24 hours). To fit 0.1 vCPU and 512 MB it reads
-  the 4 latest call transcripts and skips the annual report. A fresh company took 82 s end to end in
+  per hour and 20 per day; results cached for 24 hours and served without a model call). To fit the
+  free instance (0.1 vCPU, 512 MB) it reads the 4 latest call transcripts and skips the annual
+  report (`render.yaml`). `/api/health` checks the model and both data sources, not just the process. A fresh company took 82 s end to end in
   the acceptance test (24/24 quotes verified) and a repeat took under a second; after 15 idle
   minutes the server sleeps and the first visitor waits about a minute more, which the app says.
   If the server is asleep, busy, rate-limited or fails, the app falls back to precomputed research.
@@ -229,10 +244,12 @@ re-run the script.
 
 ## Where I'd take it next
 
-1. Web-push notifications for "needs you" items (the app is already installable and refreshes daily).
-2. Segment-level ledger: map segment guidance to segment results from investor decks.
-3. An evaluation set: 50 hand-labelled filings and 20 hand-scored guidance items to measure
-   triage precision and ledger accuracy, run on every prompt change.
+1. True background web-push for "needs you" items (needs a push server; today notifications fire
+   only when the app is opened or reopened).
+2. Segment-level ledger: map segment guidance to segment results from investor decks — most of
+   today's unscored commitments are segment targets.
+3. An independent, human-labelled evaluation set (the current accuracy check is a self-assessment),
+   run on every prompt change.
 4. Peer view: the same promise ledger across a sector ("who guides conservatively?").
 
 ---
@@ -254,9 +271,14 @@ finn/
              grounding.py (quote + figure checks), research.py (orchestration)
   llm.py     tiered routing, fallback, cache, cost ledger
   prompts.py every prompt, versioned (the version is part of the cache key)
-  pipeline.py, server.py, __main__.py
-web/         index.html, app.css, app.js, data/
-tests/       62 offline tests: core logic, parsers (synthetic page), failure scenarios
+  pipeline.py (refresh + resilience), server.py (live-research API), __main__.py (CLI)
+scripts/     snapshot.py (scheduled-refresh restore + validation gate)
+web/         index.html, app.css, app.js, sw.js + manifest (installable), data/ (snapshot, config.json)
+tests/       77 offline tests: core logic, parsers (synthetic page), failure scenarios,
+             live-research server, refresh validation gate
+docs/        BUILD_HISTORY.md, claude-code-session.txt, accuracy/, screenshots/
+.github/     workflows: tests, Pages deploy, scheduled refresh
+render.yaml, Dockerfile   hosting for the live-research API
 ```
 
 ## Research and references

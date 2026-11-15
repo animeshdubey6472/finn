@@ -803,6 +803,7 @@ function viewSettings() {
       slider("move", "Daily price move", 1, 10, 0.5, v => `±${v}%`, "Flag a stock when its close moves at least this much in a day."),
       slider("volume", "Volume spike", 1.2, 5, 0.1, v => `${v.toFixed(1)}×`, "Flag when volume is this multiple of its 20-session average."),
       previewEl),
+    ...notifyCard(),
     h("h2", {}, "Filing types that can interrupt you"),
     h("div", { class: "card" },
       h("p", { class: "small muted" }, "Material filings of these types go to “Needs you”. Others stay in “Worth knowing”."),
@@ -900,6 +901,109 @@ async function checkApi() {
   setApiStatus("unavailable");
 }
 
+/* ---------------------------------------------------------------- notifications (opt-in)
+   Notifies when the app is opened or reopened, never in the background (that would need a push
+   server). "New" means not notified before on this device: keys are kept in localStorage. */
+const NOTIFY_CAP = 3;
+function notifySupport() {
+  if (!("Notification" in window)) return "unsupported";
+  if (Notification.permission === "denied") return "blocked";
+  return store.get("notify", false) && Notification.permission === "granted" ? "on" : "off";
+}
+function notifyCandidates() {
+  const out = [];
+  for (const i of state.feed?.items || []) {
+    if (effectiveTier(i) !== "act") continue;
+    out.push({ key: `item|${i.id}`, title: `${i.symbol} · ${CATEGORY_LABEL[i.category] || i.category}`,
+               body: String(i.headline || i.title).slice(0, 120), url: "#/today" });
+  }
+  const dates = state.prices ? Object.values(state.prices.symbols)[0]?.d || [] : [];
+  if (dates.length) {
+    for (const sig of signals(dates.at(-1))) {
+      const bits = [sp(sig.move, 1), sig.volMult != null ? `${sig.volMult.toFixed(1)}× volume` : null].filter(Boolean);
+      out.push({ key: `sig|${sig.sym}|${sig.date}|${sig.kinds.join("+")}`, title: `${sig.sym} · ${bits.join(" · ")}`,
+                 body: `Unusual move at your thresholds (±${state.prefs.move}% / ${state.prefs.volume}× volume) on ${day(sig.date)}.`,
+                 url: `#/c/${encodeURIComponent(sig.sym)}` });
+    }
+  }
+  return out;
+}
+function markSeenForNotify(keys) {
+  const seen = new Set(store.get("notified", []));
+  keys.forEach(k => seen.add(k));
+  store.set("notified", [...seen].slice(-3000));
+  store.set("lastVisit", Date.now());
+  return seen;
+}
+/** First enable: everything already in the feed becomes the baseline, so there is no burst of old alerts. */
+function notifyBaseline() { markSeenForNotify(notifyCandidates().map(c => c.key)); }
+async function showNote(c) {
+  const opts = { body: c.body, tag: c.key, icon: "icon-192.png", data: { url: c.url } };
+  try {  // Android Chrome only allows notifications through the service worker
+    if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification(c.title, opts);
+      return;
+    }
+  } catch { /* fall back to a page notification */ }
+  try {
+    const n = new Notification(c.title, opts);
+    n.onclick = () => { window.focus(); location.hash = c.url; n.close(); };
+  } catch { /* the browser refused; nothing else to do */ }
+}
+let notifying = false;
+async function notifyNew() {
+  if (notifying || notifySupport() !== "on" || !state.feed) return;
+  notifying = true;
+  try {
+    const seen = new Set(store.get("notified", []));
+    const fresh = notifyCandidates().filter(c => !seen.has(c.key));
+    if (!fresh.length) { store.set("lastVisit", Date.now()); return; }
+    markSeenForNotify(fresh.map(c => c.key));  // marked before showing: never twice, even if two calls race
+    for (const c of fresh.slice(0, NOTIFY_CAP)) await showNote(c);
+    if (fresh.length > NOTIFY_CAP) await showNote({ key: `more|${Date.now()}`, title: "FINN", body: `and ${fresh.length - NOTIFY_CAP} more new item${fresh.length - NOTIFY_CAP === 1 ? "" : "s"}`, url: "#/today" });
+  } finally { notifying = false; }
+}
+function notifyCard() {
+  const status = h("p", { class: "small", role: "status", style: "margin-top:10px" });
+  const btn = h("button", { class: "btn primary", type: "button" });
+  const paint = () => {
+    const st = notifySupport();
+    btn.hidden = st === "unsupported" || st === "blocked";
+    btn.className = st === "on" ? "btn" : "btn primary";
+    btn.textContent = st === "on" ? "Turn notifications off" : "Notify me about new items when I open FINN";
+    status.textContent = {
+      unsupported: "This browser can't show notifications. On iPhone, add FINN to the Home Screen first (iOS 16.4+), then open it from there.",
+      blocked: "Notifications are blocked for this site in your browser settings. To re-enable: open site settings (the icon next to the address) → Notifications → Allow, then reload FINN.",
+      on: "On: when you open or reopen FINN, you'll be notified about new “needs you” items and unusual moves at your thresholds.",
+      off: "Off.",
+    }[st];
+  };
+  btn.addEventListener("click", async () => {
+    if (notifySupport() === "on") { store.set("notify", false); paint(); return; }
+    let perm = Notification.permission;
+    if (perm !== "granted") {
+      try { perm = await Notification.requestPermission(); } catch { perm = Notification.permission; }
+    }
+    if (perm === "granted") { store.set("notify", true); notifyBaseline(); }
+    paint();
+  });
+  paint();
+  return [h("h2", {}, "Notifications"), h("div", { class: "card" }, btn, status,
+    h("p", { class: "tiny muted", style: "margin-top:8px" }, "Notifies when you open or reopen FINN — not in the background (that would need a push server). On iPhone, add FINN to the Home Screen first (iOS 16.4+)."))];
+}
+// Reopening the app: re-fetch the snapshot if it is more than 10 minutes old, then notify what is new.
+document.addEventListener("visibilitychange", async () => {
+  if (document.visibilityState !== "visible" || !state.feed) return;
+  if (Date.now() - (state.lastFetch || 0) > 10 * 60 * 1000) {
+    try {
+      const [f, pz] = await Promise.all([getJSON("data/feed.json"), getJSON("data/prices.json")]);
+      state.feed = f; state.prices = pz; state.lastFetch = Date.now(); render();
+    } catch { /* offline: keep what we have */ }
+  }
+  notifyNew();
+});
+
 async function boot() {
   applyTheme();
   const [feed, prices, meta, index, cfg] = await Promise.allSettled([getJSON("data/feed.json"), getJSON("data/prices.json"), getJSON("data/meta.json"), getJSON("data/research/index.json"), getJSON("data/config.json")]);
@@ -909,7 +1013,9 @@ async function boot() {
   state.apiBase = configured ?? (static_host ? null : "");
   state.apiWakeMs = Number(cfg.value?.wake_timeout_s) > 0 ? Number(cfg.value.wake_timeout_s) * 1000 : 100000;
   state.apiStatus = state.apiBase === null ? "off" : "checking";
+  state.lastFetch = Date.now();
   render();
+  notifyNew();  // do not wait for a sleeping API before telling the user what is new
   await checkApi();
   if (location.hash.startsWith("#/research") || location.hash.startsWith("#/c/")) render();
   if (typeof notifyNew === "function") notifyNew();

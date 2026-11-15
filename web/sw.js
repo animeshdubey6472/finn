@@ -1,5 +1,5 @@
 /* FINN service worker: network first, cache as fallback — fresh when online, last snapshot offline. */
-const CACHE = "finn-v1";
+const CACHE = "finn-v2";
 const SHELL = ["./", "index.html", "app.css", "app.js", "manifest.webmanifest", "icon-192.png"];
 
 self.addEventListener("install", e => {
@@ -17,3 +17,16 @@ self.addEventListener("fetch", e => {
       .catch(() => caches.match(e.request).then(hit => hit || caches.match("index.html")))
   );
 });
+
+// Tapping a notification opens FINN (or focuses it) at the relevant screen.
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  const target = new URL(`./${e.notification.data?.url || "#/today"}`, self.registration.scope).href;
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
+    for (const client of list) {
+      if (client.url.startsWith(self.registration.scope)) return client.navigate(target).then(c => (c || client).focus());
+    }
+    return self.clients.openWindow(target);
+  }));
+});
+

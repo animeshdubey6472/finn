@@ -72,6 +72,46 @@ Every one of these was found by reading real output, not by tests passing.
 | Final review | The deployed app measured "last 24h" from today's date, so it would look empty a day after publishing | Windows are measured from the snapshot time, shown in the header |
 | Final review | README overstated traceability and used a symbol (TATAMOTORS) that no longer exists | Claims corrected; example replaced; limitations section added |
 
+## Final pass — 15 Nov 2026, evening
+
+I asked for a last round of seven tasks, with stop points before anything outward-facing (setting a
+secret, choosing a host, pushing). The agent ran independent work in parallel with helper agents.
+
+**Changed**
+- *Scheduled refresh with a model.* The repository had no `GEMINI_API_KEY` secret, so the daily
+  refresh was rules-only (0 model calls). After the secret was set, a triggered run read a new
+  filing with the model and published only after validation passed.
+- *Accuracy fixes.* All four disagreements from the labelled check were reproduced and fixed with
+  tests: exchange queries, multi-year promises scored as a CAGR, capex compared only like for like,
+  and a market-value size rule for small deals. The README shows the first and post-fix numbers and
+  says plainly that the second set measures known errors fixed, not general accuracy.
+- *Five more tickers* (an insurer, two PSUs, a small/mid cap). Reading them by hand found four
+  wrong outputs, each fixed at the cause rather than by dropping the ticker: insurer fundamentals,
+  industry forecasts scored as company promises, undated aspirations given an invented year, and a
+  numeric level routed through a direction check.
+- *Live research from the deployed app.* A small API on Render's free tier, with CORS for the Pages
+  site, one run at a time, per-visitor and daily caps, cached results, and a health check that
+  probes the model and both data sources. Acceptance test on a company that was not precomputed:
+  82 s fresh, under a second cached, quotes and verdicts checked by hand.
+- *Opt-in notifications* when the app is opened or reopened, and a README pass against the code.
+
+**Aborted or not found**
+- No scanned-format transcript turned up among the new tickers; all had text layers.
+- Background push (notifying while the app is closed) needs a push server and stays a next step.
+
+**Mistakes caught along the way**
+- Setting the secret from Claude Code's `!` prompt stored an empty value (no interactive prompt).
+  It was set again from `.env`, without the key entering the transcript.
+- The key reached Render with invisible trailing whitespace and was rejected. The health check
+  now reports the model API's error (never the key), and the key is trimmed everywhere.
+- A new "aspiration" rule trusted the model's own label and hid dated promises. It was narrowed
+  to the promise's actual words.
+- A multi-year rule read a neighbouring clause in the quote and turned a single-year promise into
+  a multi-year one. It now reads the extracted statement.
+- The size rule first ran after tiers were assigned, so it changed nothing visible. It was moved
+  before tiering.
+- An edit to the command-line entry point swallowed the `alerts` command. Caught and restored.
+
 ## Who decided what
 
 - **Agent proposed:** the portfolio mix, the architecture, the interaction model (an inbox you
