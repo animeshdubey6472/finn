@@ -1,0 +1,14 @@
+{
+  "_comment": "Edit freely. Any NSE symbol works; nothing in the engine is keyed to this list.",
+  "portfolio": [
+    "RELIANCE", "HDFCBANK", "TCS", "BHARTIARTL", "LT", "ITC",
+    "SUNPHARMA", "M&M", "TITAN", "BAJFINANCE", "ETERNAL", "INDIGO",
+    "TRENT", "DIXON", "POLYCAB", "PERSISTENT", "KAYNES", "CDSL"
+  ],
+  "research_extra": ["ASIANPAINT", "HAL", "SUZLON", "PAYTM"],
+  "thresholds": {
+    "volume_multiple": 2.0,
+    "price_move_pct": 4.0,
+    "lookback_sessions": 20
+  }
+}
