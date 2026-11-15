@@ -185,11 +185,12 @@ the script to get your own numbers.
 
 ## Known limitations (measured, not guessed)
 
-- **The ledger scores only what headline financials can check.** Across the seven demo
-  companies, 12 of 114 extracted commitments (11%) get a verdict; the rest (order books, capacity,
+- **The ledger scores only what headline financials can check.** Across the 22 researched
+  companies, 25 of 323 extracted commitments (8%) get a verdict; the rest (order books, capacity,
   segment targets, store counts, "outgrow the market") are shown as watch items with their next
-  checkpoint. Reliance, HDFC Bank, Titan and IndiGo guide almost entirely on such items, so their
-  ledgers show watch lists rather than verdicts. Widening the checkable metrics (debt, rupee
+  checkpoint. Many companies (Reliance, TCS, Titan, IndiGo, all the lenders) guide almost entirely on
+  such items, so their ledgers show watch lists rather than verdicts. For lenders, loan-book (AUM)
+  guidance is never scored against income. Widening the checkable metrics (debt, rupee
   EBITDA/PAT, bank deposits) made verdicts more correct but did not raise coverage for this set.
 - **EBITDA definitions differ.** Some companies count other income inside EBITDA. When a margin
   promise is met only under one definition, FINN shows both numbers instead of a verdict.
@@ -200,10 +201,16 @@ the script to get your own numbers.
   share, so the business snapshot leans on management's own description.
 - **Insurers** are analysed with the same lens as industrial companies; operating margin and cash
   conversion are not meaningful for them.
-- **Snapshot, not live, on the deployed site.** Windows ("last 24h") are measured from the
-  filings update shown under the briefing. `python -m finn refresh` updates it; live research on a
-  new ticker needs `python -m finn serve`. A scheduled refresh was deliberately not added: an
-  unattended run that a source blocks from cloud IPs could degrade the demo during review.
+- **Narrative analysis is pending for 15 companies.** All 22 have fundamentals, transcripts and the
+  promise ledger; the narrative-vs-numbers and bull/bear sections exist for 7 so far, because the
+  stronger model's free daily quota ran out. They are generated with
+  `python -m finn research <SYMBOLS>` once it resets; each page says which model wrote its analysis.
+- **Daily, not real-time.** A scheduled GitHub Action refreshes filings and end-of-day prices every
+  weekday at 19:00 IST. It never commits; it starts from the published snapshot and deploys only if
+  validation passes (most companies loaded, no published filings lost, prices not older), so a run
+  blocked by a source leaves the last good site in place. Without a `GEMINI_API_KEY` repository
+  secret, new filings are triaged by rules only; research is refreshed manually
+  (`python -m finn research …`). Live research on a new ticker needs `python -m finn serve`.
 - **Appointee backgrounds come from the filing.** SEBI requires a profile in the *appointment*
   disclosure, but a later filing (a shareholder vote, say) may not repeat it, and FINN sees only
   each company's most recent filings. For a CEO, CFO or Chair with no profile, FINN asks the model
@@ -214,7 +221,7 @@ the script to get your own numbers.
 
 ## Where I'd take it next
 
-1. Scheduled refresh (GitHub Actions cron) and web-push for "needs you" items.
+1. Web-push notifications for "needs you" items (the app is already installable and refreshes daily).
 2. Segment-level ledger: map segment guidance to segment results from investor decks.
 3. An evaluation set: 50 hand-labelled filings and 20 hand-scored guidance items to measure
    triage precision and ledger accuracy, run on every prompt change.

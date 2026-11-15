@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-15T16:23:46+00:00",
+  "generated_at": "2026-11-15T17:04:08+00:00",
   "version": "0.1.0",
   "portfolio": [
     "RELIANCE",
@@ -33,31 +33,44 @@
       "gemini:gemini-3.5-flash-lite"
     ],
     "smart": [
-      "gemini:gemini-3.6-flash",
-      "gemini:gemini-3.8-flash",
-      "gemini:gemini-3.5-flash-lite"
+      "none:none"
     ],
     "search": []
   },
   "usage_run": {
     "calls": 0,
-    "cache_hits": 0,
+    "cache_hits": 7,
     "tokens_in": 0,
     "tokens_out": 0,
     "list_cost_usd": 0,
-    "by_task": {},
+    "by_task": {
+      "transcript": {
+        "calls": 0,
+        "cached": 6,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "list_cost_usd": 0.0
+      },
+      "annual-report": {
+        "calls": 0,
+        "cached": 1,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "list_cost_usd": 0.0
+      }
+    },
     "by_model": {}
   },
   "usage_total": {
-    "calls": 178,
-    "tokens_in": 2009848,
-    "tokens_out": 211695,
-    "list_cost_usd": 0.9971
+    "calls": 269,
+    "tokens_in": 3310725,
+    "tokens_out": 305446,
+    "list_cost_usd": 1.4629
   },
   "network": {
-    "network": 1,
-    "cache": 19,
-    "bytes": 70030
+    "network": 0,
+    "cache": 8,
+    "bytes": 0
   },
   "feed_stats": {
     "total": 79,
@@ -70,21 +83,15 @@
     "settled_by_rules": 55,
     "read_this_run": 0
   },
-  "research_count": 7,
+  "research_count": 22,
   "last_run": {
-    "attempted_at": "2026-11-15T16:23:41+00:00",
-    "push": {
-      "companies_loaded": 18,
-      "companies_failed": {},
-      "prices": {
-        "attempted_at": "2026-11-15T16:23:41+00:00",
-        "ok": true,
-        "updated_at": "2026-11-15T16:23:41+00:00",
-        "as_of": "2026-11-13",
-        "missing": []
-      },
-      "feed_written": true
+    "attempted_at": "2026-11-15T17:04:08+00:00",
+    "research": {
+      "updated": [
+        "BAJFINANCE"
+      ],
+      "errors": {}
     }
   },
-  "seconds": 5.3
+  "seconds": 0.1
 }

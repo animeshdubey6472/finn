@@ -17,6 +17,8 @@ verdict is worse than none.
 """
 from __future__ import annotations
 
+import re
+
 from .. import periods
 from ..periods import Period
 
@@ -163,6 +165,14 @@ def score(item: dict, fin: Financials, call_period_end: Period) -> dict:
     # "revenue"/"pat" given as a percentage are growth targets; as rupees they are level targets.
     if metric in {"revenue", "pat"} and item.get("unit") in {"pct", "bps"}:
         metric = f"{metric}_growth"
+    if fin.is_lender and metric == "revenue_growth":
+        # Lenders guide on loan book (AUM, advances, disbursements), which is not revenue.
+        text = f"{item.get('statement', '')} {item.get('label', '')} {item.get('quote') or ''}"
+        if re.search(r"\bAUM\b|assets? under management|\bloans?\b|advances|loan book|disburse|credit growth|balance sheet growth", text, re.I):
+            return _verdict("unmeasured", "Loan-book (AUM) growth guidance; the headline financials report income, not the loan book.")
+        evidence = f"{item.get('quote') or ''} {item.get('statement', '')}"  # not the model-written label
+        if not re.search(r"revenue|total income|top ?line", evidence, re.I):
+            return _verdict("unmeasured", "The promise does not say what will grow; for a lender that could be the loan book, income or profit.")
     if fin.is_lender and metric in {"operating_margin", "ebitda"}:
         return _verdict("unmeasured", "Operating margin and EBITDA are not meaningful for lenders in the standardized financials.")
     if metric == "deposit_growth" and not fin.is_lender:

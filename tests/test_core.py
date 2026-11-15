@@ -311,3 +311,15 @@ def test_exchange_query_and_company_reply_become_one_event():
 def test_model_cannot_demote_an_exchange_query():
     verdict = classify("Clarification Sought From Sun Pharmaceutical Industries Ltd")
     assert blend(verdict, 0)[1] >= 70 and blend(verdict, 1)[1] >= 70
+
+
+def test_lender_aum_guidance_is_not_revenue():
+    lender = _fund([100, 100, 100, 100, 110, 112], [15] * 6, [10] * 6, ["Jun 2025"] + QL)
+    lender["is_lender"] = True
+    fin = ledger.Financials(lender)
+    aum = ledger.score(_g(low=20, high=24, statement="We're confident of a 20% to 24% AUM growth", label="FY27 AUM growth"), fin, (2026, 3))
+    vague = ledger.score(_g(low=26, high=27, statement="Between 26%, 27% growth we should deliver on a full year basis", label="FY27 revenue growth"), fin, (2026, 3))
+    income = ledger.score(_g(low=8, high=10, statement="Total income should grow 8-10% this year", label="FY27 revenue growth"), fin, (2026, 3))
+    assert aum["status"] == "unmeasured" and "AUM" in aum["detail"]
+    assert vague["status"] == "unmeasured"
+    assert income["status"] == "on_track"
