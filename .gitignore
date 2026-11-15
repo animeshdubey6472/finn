@@ -7,3 +7,6 @@ __pycache__/
 .DS_Store
 *.egg-info/
 /tmp/
+
+# raw conversation exports may contain secrets; only the redacted copy in docs/ is published
+llm_chat*.txt
